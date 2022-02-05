@@ -182,7 +182,6 @@ void NetworkOpsSSL::init() {
 
 bool NetworkOpsSSL::initCTX(const std::string *chainFile,
                             const std::string *passwd) {
-  SSL_METHOD *ctxMethod = 0;
   SSL_CTX *ctx = 0;
 
   //
@@ -198,7 +197,7 @@ bool NetworkOpsSSL::initCTX(const std::string *chainFile,
   }
 
   // Create the SSL context
-  ctxMethod = SSLv23_method();
+  const SSL_METHOD *ctxMethod = SSLv23_method();
   ctx = SSL_CTX_new(ctxMethod);
   SetCTX(ctx);
 
