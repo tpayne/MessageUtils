@@ -17,32 +17,36 @@ include platform/$(PLATFORM).mk
 # Messenger Utility...
 
 MSGOBJLIST := \
-    $(BLDTARGET)/Threads.$(OBJSUF) \
-    $(BLDTARGET)/Mutex.$(OBJSUF) \
-    $(BLDTARGET)/UtilityFuncs.$(OBJSUF) \
-    $(BLDTARGET)/MessengerApps.$(OBJSUF) \
-    $(BLDTARGET)/Msn.$(OBJSUF) \
-    $(BLDTARGET)/ChatSessions.$(OBJSUF) \
-    $(BLDTARGET)/MsnChatSessions.$(OBJSUF) \
-    $(BLDTARGET)/NetworkOps.$(OBJSUF) \
-    $(BLDTARGET)/NetworkOpsSSL.$(OBJSUF) \
-    $(BLDTARGET)/Msnlocale.$(OBJSUF) \
-    $(BLDTARGET)/messappcmd.$(OBJSUF)
+	$(BLDTARGET)/Threads.$(OBJSUF) \
+	$(BLDTARGET)/Mutex.$(OBJSUF) \
+	$(BLDTARGET)/UtilityFuncs.$(OBJSUF) \
+	$(BLDTARGET)/MessengerApps.$(OBJSUF) \
+	$(BLDTARGET)/Msn.$(OBJSUF) \
+	$(BLDTARGET)/MsnMsg.$(OBJSUF) \
+	$(BLDTARGET)/Yahoo.$(OBJSUF) \
+	$(BLDTARGET)/YahooMsg.$(OBJSUF) \
+	$(BLDTARGET)/ChatSessions.$(OBJSUF) \
+	$(BLDTARGET)/MsnChatSessions.$(OBJSUF) \
+	$(BLDTARGET)/NetworkOps.$(OBJSUF) \
+	$(BLDTARGET)/NetworkOpsSSL.$(OBJSUF) \
+	$(BLDTARGET)/Msnlocale.$(OBJSUF) \
+	$(BLDTARGET)/FileTransferRequests.$(OBJSUF) \
+	$(BLDTARGET)/messappcmd.$(OBJSUF)
 
 MSGEXELIST := \
-    $(BLDTARGET)/MessengerUtils$(EXESUF)
+	$(BLDTARGET)/MessengerUtils$(EXESUF)
 
 $(BLDTARGET)/MessengerUtils$(EXESUF) : $(MSGOBJLIST)
 
 EXELIST := \
-    $(MSGEXELIST)
+	$(MSGEXELIST)
 
 setup::
-    @-mkdir $(BLDTARGET)
+	@-mkdir $(BLDTARGET)
 
 clean::
-    @echo Cleaning up...
-    @-rm -fr $(BLDTARGET)
+	@echo Cleaning up...
+	@-rm -fr $(BLDTARGET)
 
 all:: setup $(EXELIST)
-    @echo Building target $(TARGET) for $(PLATFORM)...
+	@echo Building target $(TARGET) for $(PLATFORM)...

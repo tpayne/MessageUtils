@@ -3,7 +3,7 @@
 ///   MessengerUtils
 ///   Created by Tim Payne on 20/09/2008.
 ///   Copyright 2008 __MyCompanyName__. All rights reserved.
-///   
+///
 /// @file
 
 #include "Mutex.h"
@@ -19,14 +19,13 @@
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-Mutex::Mutex()
-{
+Mutex::Mutex() {
 #ifndef _WIN32
-	pthread_mutex_init(&m_MutexId, NULL);
+  pthread_mutex_init(&m_MutexId, NULL);
 #else
-	m_MutexId = CreateMutex(NULL, FALSE, NULL);
+  m_MutexId = CreateMutex(NULL, FALSE, NULL);
 #endif
 }
 
@@ -41,16 +40,14 @@ Mutex::Mutex()
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-Mutex::~Mutex()
-{
-	Unlock();
+Mutex::~Mutex() {
+  Unlock();
 #ifdef _WIN32
-	CloseHandle(m_MutexId);
+  CloseHandle(m_MutexId);
 #endif
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -63,17 +60,15 @@ Mutex::~Mutex()
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-void
-Mutex::Lock()
-{
+void Mutex::Lock() {
 #ifndef _WIN32
-	pthread_mutex_lock(&m_MutexId);
+  pthread_mutex_lock(&m_MutexId);
 #else
-	WaitForSingleObject(m_MutexId, INFINITE);
+  WaitForSingleObject(m_MutexId, INFINITE);
 #endif
-	return;
+  return;
 }
 ///
 //----------------------------------------------------------------------------
@@ -86,15 +81,13 @@ Mutex::Lock()
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-void
-Mutex::Unlock()
-{
+void Mutex::Unlock() {
 #ifndef _WIN32
-	pthread_mutex_unlock(&m_MutexId);
+  pthread_mutex_unlock(&m_MutexId);
 #else
-	ReleaseMutex(m_MutexId);
+  ReleaseMutex(m_MutexId);
 #endif
-	return;
+  return;
 }

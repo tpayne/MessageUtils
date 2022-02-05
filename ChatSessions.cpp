@@ -11,93 +11,86 @@
 #include "MsnChatSessions.h"
 #include "UtilityFuncs.h"
 
-namespace
-{
-	///
-	//----------------------------------------------------------------------------
-	//   FUNCTION SPECIFICATION
-	//   Name:
-	///   DefaultUserCallbackFunc
-	//   Description:
-	///   \brief Default user callback
-	//   Parameters:
-	///   @param std::string &in
-	///   @param std::string &out
-	///   @param int *retCode
-	//   Return:
-	///   @return CHATCALLBACKFUNC
-	//   Notes:
-	//----------------------------------------------------------------------------
-	///
+namespace {
+///
+//----------------------------------------------------------------------------
+//   FUNCTION SPECIFICATION
+//   Name:
+///   DefaultUserCallbackFunc
+//   Description:
+///   \brief Default user callback
+//   Parameters:
+///   @param std::string &in
+///   @param std::string &out
+///   @param int *retCode
+//   Return:
+///   @return CHATCALLBACKFUNC
+//   Notes:
+//----------------------------------------------------------------------------
+///
 
-	CHATCALLBACKFUNC
-	DefaultUserCallbackFunc(std::string &in, std::string &out, int *retCode)
-	{
-		out = "This is a default response for the message '";
-		out += in;
-		out += "'";
-		*retCode = 0;
-		return true;
-	}
-
-	///
-	//----------------------------------------------------------------------------
-	//   FUNCTION SPECIFICATION
-	//   Name:
-	///   SystemCallbackFunc
-	//   Description:
-	///   \brief Default system callback
-	//   Parameters:
-	///   @param std::string &in
-	///   @param std::string &out
-	///   @param int protocol
-	///   @param void *ptr
-	//   Return:
-	///   @return CHATCALLBACKSYSFUNC
-	//   Notes:
-	//----------------------------------------------------------------------------
-	///
-
-	CHATCALLBACKSYSFUNC
-	SystemCallbackFunc(std::string &in, std::string &out, int *retCode, int protocol, void *ptr)
-	{
-		if (protocol == MSN)
-		{
-			MsnChatSessions *chat = (MsnChatSessions *)ptr;
-			if (chat == NULL)
-				return false;
-
-			// Only need the first node given...
-			size_t pos1 = in.find(" ");
-			std::string command = StrUtils::SubStr(in,0,pos1);
-			StrUtils::Trim(command);
-			std::string option = StrUtils::SubStr(in,pos1,in.length());
-
-			/// Process commands
-			if (command == "help")
-			{
-				out = "Supported commands are: getfile, help."
-					  "\ngetfile - This command will get a file"
-				      "\nhelp    - This command will produce this message";
-				*retCode = 1;
-			}
-			else if (command == "getfile")
-			{
-				if (option.empty())
-					out = "getfile <fileName> - You must specify a file to process";
-				else
-				{
-					if (chat->FileTransfer(option))
-						out = "File transfer request logged";
-					else
-						out = *chat->GetError();
-				}
-				*retCode = 1;
-			}
-		}
-		return true;
-	}
+CHATCALLBACKFUNC
+DefaultUserCallbackFunc(std::string &in, std::string &out, int *retCode) {
+  out = "This is a default response for the message '";
+  out += in;
+  out += "'";
+  *retCode = 0;
+  return true;
 }
+
+///
+//----------------------------------------------------------------------------
+//   FUNCTION SPECIFICATION
+//   Name:
+///   SystemCallbackFunc
+//   Description:
+///   \brief Default system callback
+//   Parameters:
+///   @param std::string &in
+///   @param std::string &out
+///   @param int protocol
+///   @param void *ptr
+//   Return:
+///   @return CHATCALLBACKSYSFUNC
+//   Notes:
+//----------------------------------------------------------------------------
+///
+
+CHATCALLBACKSYSFUNC
+SystemCallbackFunc(std::string &in, std::string &out, int *retCode,
+                   int protocol, void *ptr) {
+  if (protocol == MSN) {
+    MsnChatSessions *chat = (MsnChatSessions *)ptr;
+    if (chat == NULL)
+      return false;
+
+    // Only need the first node given...
+    size_t pos1 = in.find(" ");
+    std::string command = StrUtils::SubStr(in, 0, pos1);
+    StrUtils::Trim(command);
+    std::string option = StrUtils::SubStr(in, pos1, in.length());
+
+    /// Process commands
+    if (command == "help") {
+      out = "Supported commands are: getfile, help."
+            "\ngetfile - This command will get a file"
+            "\nhelp    - This command will produce this message";
+      *retCode = 1;
+    } else if (command == "getfile") {
+      if (option.empty())
+        out = "getfile <fileName> - You must specify a file to process";
+      else {
+        if (chat->FileTransfer(option))
+          out = "File transfer request logged";
+        else
+          out = *chat->GetError();
+      }
+      *retCode = 1;
+    }
+  }
+  return true;
+}
+} // namespace
 
 ///
 //----------------------------------------------------------------------------
@@ -112,40 +105,34 @@ namespace
 //----------------------------------------------------------------------------
 ///
 
-ChatSessions::ChatSessions()
-{
-	init();
+ChatSessions::ChatSessions() { init(); }
+
+ChatSessions::ChatSessions(const std::string *hostName) {
+  init();
+  GetNetOps()->SetHostName(hostName);
 }
 
-ChatSessions::ChatSessions(const std::string *hostName)
-{
-	init();
-	GetNetOps()->SetHostName(hostName);
+ChatSessions::ChatSessions(const std::string *hostName, CALLBACKFUNCPTR val) {
+  init();
+  m_Thread.SetFunction(val);
+  GetNetOps()->SetHostName(hostName);
 }
 
-ChatSessions::ChatSessions(const std::string *hostName, CALLBACKFUNCPTR val)
-{
-	init();
-	m_Thread.SetFunction(val);
-	GetNetOps()->SetHostName(hostName);
-}
-
-ChatSessions::ChatSessions(const ChatSessions& val)
-{
-	init();
-	m_SessionId = val.m_SessionId;
-	m_Net = val.m_Net;
-	m_Thread = val.m_Thread;
-	m_Debug = val.m_Debug;
-	m_DryRun = val.m_DryRun;
-	m_Reply2RemoteChat = val.m_Reply2RemoteChat;
-	m_Started = val.m_Started;
-	m_ErrorStr = val.m_ErrorStr;
-	m_WhoAlias = val.m_WhoAlias;
-	m_Who = val.m_Who;
-	m_WhoAmI = val.m_WhoAmI;
-	m_UserCallback = val.m_UserCallback;
-	m_SystemCallback = val.m_SystemCallback;
+ChatSessions::ChatSessions(const ChatSessions &val) {
+  init();
+  m_SessionId = val.m_SessionId;
+  m_Net = val.m_Net;
+  m_Thread = val.m_Thread;
+  m_Debug = val.m_Debug;
+  m_DryRun = val.m_DryRun;
+  m_Reply2RemoteChat = val.m_Reply2RemoteChat;
+  m_Started = val.m_Started;
+  m_ErrorStr = val.m_ErrorStr;
+  m_WhoAlias = val.m_WhoAlias;
+  m_Who = val.m_Who;
+  m_WhoAmI = val.m_WhoAmI;
+  m_UserCallback = val.m_UserCallback;
+  m_SystemCallback = val.m_SystemCallback;
 }
 
 ///
@@ -162,69 +149,55 @@ ChatSessions::ChatSessions(const ChatSessions& val)
 ///
 
 /// Overloading the == operator
-bool
-ChatSessions::operator==(const ChatSessions &val) const
-{
-	return (m_Net == val.m_Net &&
-			m_SessionId == val.m_SessionId &&
-			m_Thread == val.m_Thread &&
-			m_Debug == val.m_Debug &&
-			m_DryRun == val.m_DryRun &&
-			m_Reply2RemoteChat == val.m_Reply2RemoteChat &&
-			m_Started == val.m_Started &&
-			!m_ErrorStr.compare(val.m_ErrorStr) &&
-			!m_WhoAlias.compare(val.m_WhoAlias) &&
-			!m_Who.compare(val.m_Who) &&
-			!m_WhoAmI.compare(val.m_WhoAmI) &&
-			!m_WhoAmIAlias.compare(val.m_WhoAmIAlias) &&			
-			m_SystemCallback == val.m_SystemCallback &&
-			m_UserCallback == val.m_UserCallback);
+bool ChatSessions::operator==(const ChatSessions &val) const {
+  return (m_Net == val.m_Net && m_SessionId == val.m_SessionId &&
+          m_Thread == val.m_Thread && m_Debug == val.m_Debug &&
+          m_DryRun == val.m_DryRun &&
+          m_Reply2RemoteChat == val.m_Reply2RemoteChat &&
+          m_Started == val.m_Started && !m_ErrorStr.compare(val.m_ErrorStr) &&
+          !m_WhoAlias.compare(val.m_WhoAlias) && !m_Who.compare(val.m_Who) &&
+          !m_WhoAmI.compare(val.m_WhoAmI) &&
+          !m_WhoAmIAlias.compare(val.m_WhoAmIAlias) &&
+          m_SystemCallback == val.m_SystemCallback &&
+          m_UserCallback == val.m_UserCallback);
 }
 
 /// Overloading the != operator
-bool
-ChatSessions::operator!=(const ChatSessions &other) const
-{
-	return !(*this == other);
+bool ChatSessions::operator!=(const ChatSessions &other) const {
+  return !(*this == other);
 }
 
 /// Overloading the = operator
-ChatSessions&
-ChatSessions::operator=(const ChatSessions &val)
-{
-	if (this == &val)
-		return *this;
+ChatSessions &ChatSessions::operator=(const ChatSessions &val) {
+  if (this == &val)
+    return *this;
 
-	m_Net = val.m_Net;
-	m_Thread = val.m_Thread;
-	m_Debug = val.m_Debug;
-	m_DryRun = val.m_DryRun;
-	m_Reply2RemoteChat = val.m_Reply2RemoteChat;
-	m_Started = val.m_Started;
-	m_ErrorStr = val.m_ErrorStr;
-	m_WhoAlias = val.m_WhoAlias;
-	m_Who = val.m_Who;
-	m_WhoAmI = val.m_WhoAmI;	
-	m_WhoAmIAlias = val.m_WhoAmIAlias;	
-	m_UserCallback = val.m_UserCallback;
-	m_SystemCallback = val.m_SystemCallback;
-	m_SessionId = val.m_SessionId;
+  m_Net = val.m_Net;
+  m_Thread = val.m_Thread;
+  m_Debug = val.m_Debug;
+  m_DryRun = val.m_DryRun;
+  m_Reply2RemoteChat = val.m_Reply2RemoteChat;
+  m_Started = val.m_Started;
+  m_ErrorStr = val.m_ErrorStr;
+  m_WhoAlias = val.m_WhoAlias;
+  m_Who = val.m_Who;
+  m_WhoAmI = val.m_WhoAmI;
+  m_WhoAmIAlias = val.m_WhoAmIAlias;
+  m_UserCallback = val.m_UserCallback;
+  m_SystemCallback = val.m_SystemCallback;
+  m_SessionId = val.m_SessionId;
 
-	return *this;
+  return *this;
 }
 
 /// Overloading the > operator
-bool
-ChatSessions::operator>(const ChatSessions &other) const
-{
-	return (m_SessionId > other.m_SessionId);
+bool ChatSessions::operator>(const ChatSessions &other) const {
+  return (m_SessionId > other.m_SessionId);
 }
 
 /// Overloading the != operator
-bool
-ChatSessions::operator<(const ChatSessions &other) const
-{
-	return (m_SessionId < other.m_SessionId);
+bool ChatSessions::operator<(const ChatSessions &other) const {
+  return (m_SessionId < other.m_SessionId);
 }
 
 ///
@@ -240,11 +213,10 @@ ChatSessions::operator<(const ChatSessions &other) const
 //----------------------------------------------------------------------------
 ///
 
-ChatSessions::~ChatSessions()
-{
-	(void)m_Thread.Stop();
-	Disconnect();
-	clear();
+ChatSessions::~ChatSessions() {
+  (void)m_Thread.Stop();
+  Disconnect();
+  clear();
 }
 
 ///
@@ -260,12 +232,10 @@ ChatSessions::~ChatSessions()
 //----------------------------------------------------------------------------
 ///
 
-void
-ChatSessions::clear()
-{
-	m_Thread.clear();
-	m_Transfers.clear();
-	return;
+void ChatSessions::clear() {
+  m_Thread.clear();
+  m_Transfers.clear();
+  return;
 }
 
 ///
@@ -281,19 +251,16 @@ ChatSessions::clear()
 //----------------------------------------------------------------------------
 ///
 
-void
-ChatSessions::init()
-{
-	m_Thread.init();
-	m_DryRun = false;
-	m_Debug = false;
-	m_Started = false;
-	m_SessionId = 0;
-	SetSystemFunction(SystemCallbackFunc);
-	SetFunction(DefaultUserCallbackFunc);
-	return;
+void ChatSessions::init() {
+  m_Thread.init();
+  m_DryRun = false;
+  m_Debug = false;
+  m_Started = false;
+  m_SessionId = 0;
+  SetSystemFunction(SystemCallbackFunc);
+  SetFunction(DefaultUserCallbackFunc);
+  return;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -309,13 +276,11 @@ ChatSessions::init()
 //----------------------------------------------------------------------------
 ///
 
-bool
-ChatSessions::Disconnect()
-{
-	if (GetNetOps())
-		GetNetOps()->Disconnect();
+bool ChatSessions::Disconnect() {
+  if (GetNetOps())
+    GetNetOps()->Disconnect();
 
-	return false;
+  return false;
 }
 
 ///
@@ -332,15 +297,13 @@ ChatSessions::Disconnect()
 //----------------------------------------------------------------------------
 ///
 
-int
-ChatSessions::StartChat()
-{
+int ChatSessions::StartChat() {
 #ifndef _WIN32
-	m_Thread.SetAttribute(PTHREAD_CREATE_DETACHED);
+  m_Thread.SetAttribute(PTHREAD_CREATE_DETACHED);
 #endif
 
-	int rc = m_Thread.Start();
-	return(rc);
+  int rc = m_Thread.Start();
+  return (rc);
 }
 
 ///
@@ -357,12 +320,7 @@ ChatSessions::StartChat()
 //----------------------------------------------------------------------------
 ///
 
-bool
-ChatSessions::Chat()
-{
-	return false;
-}
-
+bool ChatSessions::Chat() { return false; }
 
 ///
 //----------------------------------------------------------------------------
@@ -379,17 +337,9 @@ ChatSessions::Chat()
 //----------------------------------------------------------------------------
 ///
 
-bool
-ChatSessions::FileTransfer(const std::string &fileName)
-{
-	return false;
-}
+bool ChatSessions::FileTransfer(const std::string &fileName) { return false; }
 
-bool
-ChatSessions::FileTransfer(const char *fileName)
-{
-	return false;
-}
+bool ChatSessions::FileTransfer(const char *fileName) { return false; }
 
 ///
 //----------------------------------------------------------------------------
@@ -406,34 +356,31 @@ ChatSessions::FileTransfer(const char *fileName)
 //----------------------------------------------------------------------------
 ///
 
-bool
-ChatSessions::RemoveTransferRequest(int requestId)
-{
-	FileTransferRequests::iterator it;
-	FileTransfersReq request;
-	bool bMatch = false;
-	
-	/// Search for the transfer requested
-	for(it=GetTransfers()->begin();(it!=GetTransfers()->end() && !bMatch); it++)
-	{
-		FileTransfersReq tmpFileReq = static_cast<FileTransfersReq>(*it);
-		if (tmpFileReq.GetCookie() == requestId)
-		{
-			request = tmpFileReq;
-			bMatch = true;
-			break;
-		}
-	}
+bool ChatSessions::RemoveTransferRequest(int requestId) {
+  FileTransferRequests::iterator it;
+  FileTransfersReq request;
+  bool bMatch = false;
 
-	if (bMatch)
-	{
-		/// Blow it away
-		GetTransfers()->erase(it);
-		if (IsDebug())
-			(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] Requested transfer %d removed", 
-										 __FILE__, __LINE__, requestId);	
-		return true;
-	}
-	
-	return false;
+  /// Search for the transfer requested
+  for (it = GetTransfers()->begin(); (it != GetTransfers()->end() && !bMatch);
+       it++) {
+    FileTransfersReq tmpFileReq = static_cast<FileTransfersReq>(*it);
+    if (tmpFileReq.GetCookie() == requestId) {
+      request = tmpFileReq;
+      bMatch = true;
+      break;
+    }
+  }
+
+  if (bMatch) {
+    /// Blow it away
+    GetTransfers()->erase(it);
+    if (IsDebug())
+      (void)DebugUtils::LogMessage(
+          MSGINFO, "Debug: [%s,%d] Requested transfer %d removed", __FILE__,
+          __LINE__, requestId);
+    return true;
+  }
+
+  return false;
 }

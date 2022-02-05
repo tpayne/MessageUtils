@@ -8,69 +8,56 @@
 
 #include <iostream>
 #ifndef _WIN32
+#include <thread>
 #include <sys/utsname.h>
-#include <pthread.h>
 #endif
 #include <locale.h>
 
 #include "Msn.h"
+#include "MsnChatSessions.h"
+#include "Msnlocale.h"
+#include "Mutex.h"
 #include "NetworkOpsSSL.h"
 #include "UtilityFuncs.h"
-#include "Msnlocale.h"
-#include "MsnChatSessions.h"
-#include "Mutex.h"
 
+namespace {
+static Mutex TriId;
 
-namespace
-{
-	static Mutex TriId;
+static void LockMutex(void) { TriId.Lock(); }
 
-	static void LockMutex(void)
-	{
-		TriId.Lock();
-	}
+static void UnlockMutex(void) { TriId.Unlock(); }
 
-	static void UnlockMutex(void)
-	{
-		TriId.Unlock();
-	}
+static CALLBACKFUNC ProcessCallback(void *ptrClass) {
+  Msn *msn = (Msn *)ptrClass;
+  if (msn) {
+    if (msn->IsDebug())
+      std::cout << "Thread id: " << msn->GetThread()->GetThreadId()
+                << std::endl;
+    if (msn->ProcessCalls()) {
+      msn->SetThreadState(1);
+    } else
+      msn->SetThreadState(-1);
 
-	static CALLBACKFUNC ProcessCallback(void *ptrClass)
-	{
-		Msn *msn = (Msn *)ptrClass;
-		if (msn)
-		{
-			if (msn->IsDebug())
-				std::cout << "Thread id: " << msn->GetThread()->GetThreadId() << std::endl;
-			if (msn->ProcessCalls())
-			{
-				msn->SetThreadState(1);
-			}
-			else
-				msn->SetThreadState(-1);
-
-			if (msn->IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] Process thread died unnaturally with %d", __FILE__, __LINE__, msn->GetThreadState());
-
-		}
-		return 0;
-	}
-
-	static CALLBACKFUNC ChatCallback(void *ptrClass)
-	{
-		MsnChatSessions *chat = (MsnChatSessions *)ptrClass;
-		if (chat)
-		{
-			if (chat->IsDebug())
-				std::cout << "Thread id: " << chat->GetThread()->GetThreadId() << std::endl;
-			if (chat->Chat())
-			{
-			}
-		}
-		return 0;
-	}
+    if (msn->IsDebug())
+      (void)DebugUtils::LogMessage(
+          MSGINFO, "Debug: [%s,%d] Process thread died unnaturally with %d",
+          __FILE__, __LINE__, msn->GetThreadState());
+  }
+  return 0;
 }
 
+static CALLBACKFUNC ChatCallback(void *ptrClass) {
+  MsnChatSessions *chat = (MsnChatSessions *)ptrClass;
+  if (chat) {
+    if (chat->IsDebug())
+      std::cout << "Thread id: " << chat->GetThread()->GetThreadId()
+                << std::endl;
+    if (chat->Chat()) {
+    }
+  }
+  return 0;
+}
+} // namespace
 
 ///
 //----------------------------------------------------------------------------
@@ -85,15 +72,11 @@ namespace
 //----------------------------------------------------------------------------
 ///
 
-Msn::Msn()
-{
-	init();
-}
+Msn::Msn() { init(); }
 
-Msn::Msn(const int argc, const char **argv)
-{
-	init();
-	m_Ok = ParseArgs(argc, argv);
+Msn::Msn(const int argc, const char **argv) {
+  init();
+  m_Ok = ParseArgs(argc, argv);
 }
 
 ///
@@ -109,10 +92,9 @@ Msn::Msn(const int argc, const char **argv)
 //----------------------------------------------------------------------------
 ///
 
-Msn::~Msn()
-{
-	clear();
-	init();
+Msn::~Msn() {
+  clear();
+  init();
 }
 
 ///
@@ -128,16 +110,14 @@ Msn::~Msn()
 //----------------------------------------------------------------------------
 ///
 
-void
-Msn::clear()
-{
-	(void)Disconnect();
+void Msn::clear() {
+  (void)Disconnect();
 #ifndef _WIN32
-	m_Thread.Stop();
+  m_Thread.Stop();
 #endif
-	m_Thread.clear();
-	MessengerApps::clear();
-	return;
+  m_Thread.clear();
+  MessengerApps::clear();
+  return;
 }
 
 ///
@@ -153,18 +133,15 @@ Msn::clear()
 //----------------------------------------------------------------------------
 ///
 
-void
-Msn::init()
-{
-	MessengerApps::init();
-	m_Thread.init();
-	m_bConnect=false;
-	m_TriId = 1;
-	m_Protocol = 0;
-	m_ThreadState = 0;
-	return;
+void Msn::init() {
+  MessengerApps::init();
+  m_Thread.init();
+  m_bConnect = false;
+  m_TriId = 1;
+  m_Protocol = 0;
+  m_ThreadState = 0;
+  return;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -181,117 +158,103 @@ Msn::init()
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::ParseArgs(const int argc, const char **argv)
-{
-	//
-	// Parse options...
-	//
-	int i = 1;
-	while(i < argc)
-	{
-		switch((char)(*(argv[i]+1)))
-		{
-			// Config file
-			case 'c':
-				if (!strcasecmp(argv[i],"-config-file"))
-				{
-					if ((i+1) == argc)
-						return false;
-					SetConfigFile(argv[++i]);
-				}
-				i++;
-				break;
-				
-			case 'm':
-				if (!strcasecmp(argv[i],"-msnhost"))
-				{
-					if ((i+1) == argc)
-						return false;
-					SetHostName(argv[++i]);
-				}
-				i++;
-				break;
-				
-			case 's':
-				if (!strcasecmp(argv[i],"-service"))
-				{
-					if ((i+1) == argc)
-						return false;
-					SetService(argv[++i]);
-				}
-				i++;
-				break;
-				
-			// Password...
-			case 'p':
-				if (!strcasecmp(argv[i],"-password"))
-				{
-					if ((i+1) == argc)
-						return false;
-					SetPasswd(argv[++i]);
-				}
-				i++;
-				break;
-			// User...
-			case 'u':
-				if (!strcasecmp(argv[i],"-user"))
-				{
-					if ((i+1) == argc)
-						return false;
-					SetUserName(argv[++i]);
-				}
-				i++;
-				break;
-			// Options...
-			case '-':
-				if (!strcasecmp(argv[i],"--debug"))
-					SetDebug(true);
-				else if (!strcasecmp(argv[i],"--dryrun"))
-					SetDryRun(true);
-				i++;
-				break;
-			default:
-				i++;
-				break;
-		}
-	}
+bool Msn::ParseArgs(const int argc, const char **argv) {
+  //
+  // Parse options...
+  //
+  int i = 1;
+  while (i < argc) {
+    switch ((char)(*(argv[i] + 1))) {
+    // Config file
+    case 'c':
+      if (!strcasecmp(argv[i], "-config-file")) {
+        if ((i + 1) == argc)
+          return false;
+        SetConfigFile(argv[++i]);
+      }
+      i++;
+      break;
 
-	if (!GetConfigFile()->empty())
-	{
-		if (ReadConfigFile())
-		{
-			if (!IsDebug())
-				SetDebug(StrUtils::str2bool(GetSymbol("DEBUG")));
-			if (!IsDryRun())
-				SetDryRun(StrUtils::str2bool(GetSymbol("DRYRUN")));
-			if (GetUser()->empty())
-			{
-				if (GetSymbol("MSN_USER"))
-				{
-					std::string msnUser = GetSymbol("MSN_USER");
-					std::string userName = StrUtils::SubStr(msnUser,0,msnUser.find(":"));
-					std::string passWd = StrUtils::SubStr(msnUser,(msnUser.find(":"))+1,msnUser.length());
-					StrUtils::Trim(userName);
-					StrUtils::Trim(passWd);
-					SetUserName(userName);
-					SetPasswd(passWd);
-				}
-			}
-			if (GetHostName()->empty())
-			{
-				if (GetSymbol("MSN_HOST"))
-				{
-					std::string msnHost = GetSymbol("MSN_HOST");
-					StrUtils::Trim(msnHost);
-					SetHostName(msnHost);
-				}
-			}
-		}
-		else
-			return false;
-	}
-	return true;
+    case 'm':
+      if (!strcasecmp(argv[i], "-msnhost")) {
+        if ((i + 1) == argc)
+          return false;
+        SetHostName(argv[++i]);
+      }
+      i++;
+      break;
+
+    case 's':
+      if (!strcasecmp(argv[i], "-service")) {
+        if ((i + 1) == argc)
+          return false;
+        SetService(argv[++i]);
+      }
+      i++;
+      break;
+
+    // Password...
+    case 'p':
+      if (!strcasecmp(argv[i], "-password")) {
+        if ((i + 1) == argc)
+          return false;
+        SetPasswd(argv[++i]);
+      }
+      i++;
+      break;
+    // User...
+    case 'u':
+      if (!strcasecmp(argv[i], "-user")) {
+        if ((i + 1) == argc)
+          return false;
+        SetUserName(argv[++i]);
+      }
+      i++;
+      break;
+    // Options...
+    case '-':
+      if (!strcasecmp(argv[i], "--debug"))
+        SetDebug(true);
+      else if (!strcasecmp(argv[i], "--dryrun"))
+        SetDryRun(true);
+      i++;
+      break;
+    default:
+      i++;
+      break;
+    }
+  }
+
+  if (!GetConfigFile()->empty()) {
+    if (ReadConfigFile()) {
+      if (!IsDebug())
+        SetDebug(StrUtils::str2bool(GetSymbol("DEBUG")));
+      if (!IsDryRun())
+        SetDryRun(StrUtils::str2bool(GetSymbol("DRYRUN")));
+      if (GetUser()->empty()) {
+        if (GetSymbol("MSN_USER")) {
+          std::string msnUser = GetSymbol("MSN_USER");
+          std::string userName =
+              StrUtils::SubStr(msnUser, 0, msnUser.find(":"));
+          std::string passWd = StrUtils::SubStr(
+              msnUser, (msnUser.find(":")) + 1, msnUser.length());
+          StrUtils::Trim(userName);
+          StrUtils::Trim(passWd);
+          SetUserName(userName);
+          SetPasswd(passWd);
+        }
+      }
+      if (GetHostName()->empty()) {
+        if (GetSymbol("MSN_HOST")) {
+          std::string msnHost = GetSymbol("MSN_HOST");
+          StrUtils::Trim(msnHost);
+          SetHostName(msnHost);
+        }
+      }
+    } else
+      return false;
+  }
+  return true;
 }
 
 ///
@@ -309,12 +272,12 @@ Msn::ParseArgs(const int argc, const char **argv)
 //----------------------------------------------------------------------------
 ///
 
-void
-Msn::Usage(const int argc, const char **argv)
-{
-	std::cout << std::endl << "Usage: <hostName> <serviceName> -user <userId> -password <passwd>" <<
-		std::endl;
-	return;
+void Msn::Usage(const int argc, const char **argv) {
+  std::cout
+      << std::endl
+      << "Usage: <hostName> <serviceName> -user <userId> -password <passwd>"
+      << std::endl;
+  return;
 }
 
 ///
@@ -330,40 +293,36 @@ Msn::Usage(const int argc, const char **argv)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::Connect()
-{
-	bool bRet = false;
+bool Msn::Connect() {
+  bool bRet = false;
 
-	for(int i=0;i<=GetConnectAttempts();i++)
-	{
-		(void)GetNetOps()->Disconnect();
-		(void)GetNetOps()->SetHostName(GetHostName());
-		(void)GetNetOps()->SetService(GetService());
+  for (int i = 0; i <= GetConnectAttempts(); i++) {
+    (void)GetNetOps()->Disconnect();
+    (void)GetNetOps()->SetHostName(GetHostName());
+    (void)GetNetOps()->SetService(GetService());
 
-		bRet = false;
-		m_bConnect = false;
+    bRet = false;
+    m_bConnect = false;
 
-		// Set mode to use non-blocking sockets
-		GetNetOps()->SetNonBlocking(true);
+    // Set mode to use non-blocking sockets
+    GetNetOps()->SetNonBlocking(true);
 
-		//
-		// Start the conversation to login
-		//
+    //
+    // Start the conversation to login
+    //
 
-		// Try MSNP8 first...
-		bRet = MSNP8_Login();
-		if (bRet)
-		{
-			SetProtcol(MSNP8);
-			bRet = MSNSynch();
-			m_bConnect = bRet;
-			return bRet;
-		}
-		// Try MSNP?? TODO
-	}
+    // Try MSNP8 first...
+    bRet = MSNP8_Login();
+    if (bRet) {
+      SetProtcol(MSNP8);
+      bRet = MSNSynch();
+      m_bConnect = bRet;
+      return bRet;
+    }
+    // Try MSNP?? TODO
+  }
 
-	return bRet;
+  return bRet;
 }
 
 ///
@@ -379,384 +338,385 @@ Msn::Connect()
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::MSNP8_Login(void)
-{
-	//
-	// Note - if any Talk calls fail with a hang, this is mostly the
-	// remote server closed the connection because it got input it wasn't expecting
-	// e.g. a message missing a '\r\n'
-	//
-	std::string responses;
-	std::string message;
-	bool bRet = false;
+bool Msn::MSNP8_Login(void) {
+  //
+  // Note - if any Talk calls fail with a hang, this is mostly the
+  // remote server closed the connection because it got input it wasn't
+  // expecting e.g. a message missing a '\r\n'
+  //
+  std::string responses;
+  std::string message;
+  bool bRet = false;
 
-	if (IsDebug())
-		std::cout << "Attempting to connect to remote host..." << std::endl;
+  if (IsDebug())
+    std::cout << "Attempting to connect to remote host..." << std::endl;
 
-	// Connect to the remote host...
-	if (!IsDryRun())
-		bRet = GetNetOps()->Connect();
-	else
-		bRet = true;
+  // Connect to the remote host...
+  if (!IsDryRun())
+    bRet = GetNetOps()->Connect();
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return false;
-	}
-	else if (IsDebug())
-		std::cout << "Remote connection was successful" << std::endl;
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return false;
+  } else if (IsDebug())
+    std::cout << "Remote connection was successful" << std::endl;
 
-	// Get some machine details...
-	bool bGuess = false;
-	unsigned int x = 0;
+  // Get some machine details...
+  bool bGuess = false;
+  unsigned int x = 0;
 
 #ifndef _WIN32
-	struct utsname info = { 0 };
+  struct utsname info = {0};
 
-	{
-		if (uname(&info)!=0)
-			bGuess = true;
+  {
+    if (uname(&info) != 0)
+      bGuess = true;
 
-		// Get some locale details...
-		(void)setlocale(LC_ALL, "");
-		char *locale = setlocale(LC_CTYPE, NULL);
-		char localeStr[256+1];
-		(void)strncpy(localeStr, locale, 256);
-		char *locLang = strchr(localeStr,'_');
-		if (locLang)
-			*locLang = '\0';
+    // Get some locale details...
+    (void)setlocale(LC_ALL, "");
+    char *locale = setlocale(LC_CTYPE, NULL);
+    char localeStr[256 + 1];
+    (void)strncpy(localeStr, locale, 256);
+    char *locLang = strchr(localeStr, '_');
+    if (locLang)
+      *locLang = '\0';
 
-		x = Msnlocale::GetLocaleCode(localeStr);
-		if (x == 0)
-			bGuess = true;
-	}
+    x = Msnlocale::GetLocaleCode(localeStr);
+    if (x == 0)
+      bGuess = true;
+  }
 #else
-	{
-		// Get some locale details...
-		(void)setlocale(LC_ALL, "");
-		char *locale = setlocale(LC_CTYPE, NULL);
-		char localeStr[256+1];
-		(void)strncpy_s(localeStr, 256, locale, 256);
-		char *locLang = strchr(localeStr,'_');
-		if (locLang)
-			*locLang = '\0';
+  {
+    // Get some locale details...
+    (void)setlocale(LC_ALL, "");
+    char *locale = setlocale(LC_CTYPE, NULL);
+    char localeStr[256 + 1];
+    (void)strncpy_s(localeStr, 256, locale, 256);
+    char *locLang = strchr(localeStr, '_');
+    if (locLang)
+      *locLang = '\0';
 
-		x = Msnlocale::GetLocaleCode(localeStr);
-		if (x == 0)
-			bGuess = true;
-	}
+    x = Msnlocale::GetLocaleCode(localeStr);
+    if (x == 0)
+      bGuess = true;
+  }
 #endif
 
-	// Negotate protocols. For the moment, I will only support MSNP8 and CVR0
-	// other protocols I coud support later and MSNP9, MSNC1 and MSNP10
-	//
-	message = "VER 1 MSNP8 CVR0\r\n";
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  // Negotate protocols. For the moment, I will only support MSNP8 and CVR0
+  // other protocols I coud support later and MSNP9, MSNC1 and MSNP10
+  //
+  message = "VER 1 MSNP8 CVR0\r\n";
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (!IsDryRun())
-	{
-		if (IsDebug())
-			(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
-		// Check if response std::string has MSNP8 or CVR0...
-		if (strstr(responses.c_str(),"MSNP8")==0 &&
-			strstr(responses.c_str(),"CVR0")==0)
-		{
-			bRet = false;
-			SetError("This MSN server does not support the necessary protocols for this client to work");
-			return bRet;
-		}
-	}
+  if (!IsDryRun()) {
+    if (IsDebug())
+      (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                   __LINE__, responses.c_str());
+    // Check if response std::string has MSNP8 or CVR0...
+    if (strstr(responses.c_str(), "MSNP8") == 0 &&
+        strstr(responses.c_str(), "CVR0") == 0) {
+      bRet = false;
+      SetError("This MSN server does not support the necessary protocols for "
+               "this client to work");
+      return bRet;
+    }
+  }
 
-	// Negotated the protocol, so next send the login std::string...
+  // Negotated the protocol, so next send the login std::string...
 
-	// Build up client details. If don't know, make a guess...
-	if (bGuess)
-		message = "CVR 2 0x0409 win 4.10 i386 ";
-	else
-	{
-		// Know what the client is, so...
-		char *tmpStr = new char[4096+1];
+  // Build up client details. If don't know, make a guess...
+  if (bGuess)
+    message = "CVR 2 0x0409 win 4.10 i386 ";
+  else {
+    // Know what the client is, so...
+    char *tmpStr = new char[4096 + 1];
 #ifndef _WIN32
-		snprintf(tmpStr,4096,"CVR 2 %#06x %s %s %s ", x, info.sysname, info.release, info.machine);
+    snprintf(tmpStr, 4096, "CVR 2 %#06x %s %s %s ", x, info.sysname,
+             info.release, info.machine);
 #else
-		_snprintf_s(tmpStr,4096,4096, "CVR 2 %#06x win 4.10 i386 ", x);
+    _snprintf_s(tmpStr, 4096, 4096, "CVR 2 %#06x win 4.10 i386 ", x);
 #endif
-		message = tmpStr;
-		delete tmpStr;
-	}
+    message = tmpStr;
+    delete tmpStr;
+  }
 
-	// Login std::string for MSN...
-	message += CLIENTAPP;
-	message += " ";
-	message += CLIENTAPPVRS;
-	message += " MSMSGS ";
-	message += *GetUser();
-	message += "\r\n";
+  // Login std::string for MSN...
+  message += CLIENTAPP;
+  message += " ";
+  message += CLIENTAPPVRS;
+  message += " MSMSGS ";
+  message += *GetUser();
+  message += "\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	message = "USR 3 TWN I ";
-	message += *GetUser();
-	message += "\r\n";
+  message = "USR 3 TWN I ";
+  message += *GetUser();
+  message += "\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	// Typical response will be a transfer such as
-	//
-	// XFR 3 NS 207.46.110.133:1863 0 65.54.239.211:1863\n
-	// ice.microsoft.com http://messenger.msn.com\n\r
-	//
-	// When we get this then we need to terminate and reconnect to new server
+  // Typical response will be a transfer such as
+  //
+  // XFR 3 NS 207.46.110.133:1863 0 65.54.239.211:1863\n
+  // ice.microsoft.com http://messenger.msn.com\n\r
+  //
+  // When we get this then we need to terminate and reconnect to new server
 
-	if (!IsDryRun())
-	{
-		// Check if response std::string has XFR
-		if (strstr(responses.c_str(),"XFR "))
-		{
-			// Close connection
-			GetNetOps()->Disconnect();
+  if (!IsDryRun()) {
+    // Check if response std::string has XFR
+    if (strstr(responses.c_str(), "XFR ")) {
+      // Close connection
+      GetNetOps()->Disconnect();
 
-			size_t pos = 0;
+      size_t pos = 0;
 
-			//Tokenise the std::string we have and get the details we need
-			for(int xx=0;xx<3;xx++)
-			{
-				pos = responses.find(" ");
-				responses = StrUtils::SubStr(responses,pos+1,responses.length());
-			}
+      // Tokenise the std::string we have and get the details we need
+      for (int xx = 0; xx < 3; xx++) {
+        pos = responses.find(" ");
+        responses = StrUtils::SubStr(responses, pos + 1, responses.length());
+      }
 
-			// Only need the first node given...
-			size_t pos1 = responses.find(" ");
-			message = StrUtils::SubStr(responses,0,pos1);
+      // Only need the first node given...
+      size_t pos1 = responses.find(" ");
+      message = StrUtils::SubStr(responses, 0, pos1);
 
-			// Reset hostname - NetOps will deal with hostName/addr:<port> okay, so no need to parse
-			GetNetOps()->SetHostName(&message);
+      // Reset hostname - NetOps will deal with hostName/addr:<port> okay, so no
+      // need to parse
+      GetNetOps()->SetHostName(&message);
 
-			// Reinvoke login with new details...
-			return (MSNP8_Login());
-		}
+      // Reinvoke login with new details...
+      return (MSNP8_Login());
+    }
 
-		// Save a copy of this response as we will need it for a future challenge/response...
-		std::string challengeURL = responses;
-		responses = "";
+    // Save a copy of this response as we will need it for a future
+    // challenge/response...
+    std::string challengeURL = responses;
+    responses = "";
 
-		// So, we now have a valid MSN host except that we now need to authenticate ourselves against the
-		// MSN passport server, i.e. nexus. This needs to be done using a SSL connection...
+    // So, we now have a valid MSN host except that we now need to authenticate
+    // ourselves against the MSN passport server, i.e. nexus. This needs to be
+    // done using a SSL connection...
 
-		{
-			NetworkOpsSSL nexus("nexus.passport.com:443");
-			if (IsDebug())
-				std::cout << "Attempting to connect to nexus passport host..." << std::endl;
+    {
+      NetworkOpsSSL nexus("nexus.passport.com:443");
+      if (IsDebug())
+        std::cout << "Attempting to connect to nexus passport host..."
+                  << std::endl;
 
-			// Connect to the remote host...
-			std::string keyChain(KEYCHAIN);
-			std::string passwd(KEYPWD);
+      // Connect to the remote host...
+      std::string keyChain(KEYCHAIN);
+      std::string passwd(KEYPWD);
 
-			bRet = nexus.Connect(&keyChain,&passwd);
-			if (!bRet)
-			{
-				SetError(nexus.GetError());
-				return false;
-			}
-			else if (IsDebug())
-				std::cout << "Remote connection was successful" << std::endl;
+      bRet = nexus.Connect(&keyChain, &passwd);
+      if (!bRet) {
+        SetError(nexus.GetError());
+        return false;
+      } else if (IsDebug())
+        std::cout << "Remote connection was successful" << std::endl;
 
-			responses = "";
-			message = "GET /rdr/pprdr.asp HTTP/1.1\r\nUser-Agent: MyClient\r\nHost: ";
-			message += *GetHostName();
-			message += "\r\n\r\n";
+      responses = "";
+      message = "GET /rdr/pprdr.asp HTTP/1.1\r\nUser-Agent: MyClient\r\nHost: ";
+      message += *GetHostName();
+      message += "\r\n\r\n";
 
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
-			if (!nexus.Talk(&message, &responses))
-			{
-				SetError(nexus.GetError());
-				return false;
-			}
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
-		}
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, message.c_str());
+      if (!nexus.Talk(&message, &responses)) {
+        SetError(nexus.GetError());
+        return false;
+      }
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, responses.c_str());
+    }
 
-		// Check if we have a login server returned to us
-		if (strstr(responses.c_str(),NEXUSLOGINKEY)==0)
-		{
-			SetError("The MSN password server returned an unrecognised std::string");
-			return false;
-		}
+    // Check if we have a login server returned to us
+    if (strstr(responses.c_str(), NEXUSLOGINKEY) == 0) {
+      SetError("The MSN password server returned an unrecognised std::string");
+      return false;
+    }
 
-		std::string passportHost = StrUtils::SubStr(responses,responses.find(NEXUSLOGINKEY),responses.length());
-		passportHost = StrUtils::SubStr(passportHost,strlen(NEXUSLOGINKEY),passportHost.length());
-		passportHost = StrUtils::SubStr(passportHost,0,passportHost.find(","));
-		std::string loginURL = StrUtils::SubStr(passportHost,passportHost.find("/"),passportHost.length());
-		passportHost = StrUtils::SubStr(passportHost,0,passportHost.find("/"));
+    std::string passportHost = StrUtils::SubStr(
+        responses, responses.find(NEXUSLOGINKEY), responses.length());
+    passportHost = StrUtils::SubStr(passportHost, strlen(NEXUSLOGINKEY),
+                                    passportHost.length());
+    passportHost = StrUtils::SubStr(passportHost, 0, passportHost.find(","));
+    std::string loginURL = StrUtils::SubStr(
+        passportHost, passportHost.find("/"), passportHost.length());
+    passportHost = StrUtils::SubStr(passportHost, 0, passportHost.find("/"));
 
-		if (IsDebug())
-			(void)DebugUtils::LogMessage(MSGINFO,
-										 "Debug: Attempting to connect to remote host \"%s\""
-										 "using URL \"%s\"",passportHost.c_str(),
-										 loginURL.c_str());
+    if (IsDebug())
+      (void)DebugUtils::LogMessage(
+          MSGINFO,
+          "Debug: Attempting to connect to remote host \"%s\""
+          "using URL \"%s\"",
+          passportHost.c_str(), loginURL.c_str());
 
+    {
+      std::string port("443");
+      NetworkOpsSSL nexus(&passportHost, &port);
 
-		{
-			std::string port("443");
-			NetworkOpsSSL nexus(&passportHost, &port);
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO,
+                                     "Attempting to connect to %s host...",
+                                     passportHost.c_str());
 
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO,"Attempting to connect to %s host...",
-											 passportHost.c_str());
+      // Connect to the remote host...
+      std::string keyChain(KEYCHAIN);
+      std::string passwd(KEYPWD);
 
-			// Connect to the remote host...
-			std::string keyChain(KEYCHAIN);
-			std::string passwd(KEYPWD);
+      bRet = nexus.Connect(&keyChain, &passwd);
+      if (!bRet) {
+        SetError(nexus.GetError());
+        return false;
+      } else if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO,
+                                     "Remote connection was successful");
 
-			bRet = nexus.Connect(&keyChain,&passwd);
-			if (!bRet)
-			{
-				SetError(nexus.GetError());
-				return false;
-			}
-			else if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO,"Remote connection was successful");
+      responses = "";
+      message = "GET ";
+      message += loginURL;
+      message += " HTTP/1.1\r\nAuthorization: Passport1.4 ";
+      message +=
+          "OrgVerb=GET,OrgURL=http%3A%2F%2Fmessenger%2Emsn%2Ecom,sign-in=";
+      message += *GetUser();
+      message += ",pwd=";
+      message += *GetPasswd();
+      message += ",";
+      // Need the previous challengeURL saved so that can provide the required
+      // response
+      message += StrUtils::SubStr(challengeURL, challengeURL.find("lc="),
+                                  challengeURL.length());
+      message += "User-Agent: MSMSGS\r\n";
+      message += "Host: ";
+      message += *nexus.GetHostName();
+      message +=
+          "\r\nConnection: Keep-Alive\r\nCache-Control: no-cache\r\n\r\n";
 
-			responses = "";
-			message = "GET ";
-			message += loginURL;
-			message += " HTTP/1.1\r\nAuthorization: Passport1.4 ";
-			message += "OrgVerb=GET,OrgURL=http%3A%2F%2Fmessenger%2Emsn%2Ecom,sign-in=";
-			message += *GetUser();
-			message += ",pwd=";
-			message += *GetPasswd();
-			message += ",";
-			// Need the previous challengeURL saved so that can provide the required response
-			message += StrUtils::SubStr(challengeURL,challengeURL.find("lc="),challengeURL.length());
-			message += "User-Agent: MSMSGS\r\n";
-			message += "Host: ";
-			message += *nexus.GetHostName();
-			message += "\r\nConnection: Keep-Alive\r\nCache-Control: no-cache\r\n\r\n";
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, message.c_str());
+      if (!nexus.Talk(&message, &responses)) {
+        SetError(nexus.GetError());
+        return false;
+      }
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, responses.c_str());
+    }
 
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
-			if (!nexus.Talk(&message, &responses))
-			{
-				SetError(nexus.GetError());
-				return false;
-			}
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
-		}
+    // Need to see if I worked...
+    if (strstr(responses.c_str(), "HTTP/1.1 200 OK\r\n") != 0) {
+      // Final challenge/response to actually connect...
+      message = "USR 4 TWN S ";
+      if (strstr(responses.c_str(), NEXUSAUTHKEY)) {
+        responses = StrUtils::SubStr(responses, responses.find(NEXUSAUTHKEY),
+                                     responses.length());
+        responses = StrUtils::SubStr(responses, strlen(NEXUSAUTHKEY),
+                                     responses.length());
+      } else {
+        responses = StrUtils::SubStr(responses, responses.find(NEXUSAUTHKEYALT),
+                                     responses.length());
+        responses = StrUtils::SubStr(responses, strlen(NEXUSAUTHKEYALT),
+                                     responses.length());
+      }
+      responses = StrUtils::SubStr(responses, 0, responses.rfind("'"));
+      responses = StrUtils::SubStr(responses, (responses.find("'") + 1),
+                                   responses.length());
+      message += responses;
+      message += "\r\n";
 
-		// Need to see if I worked...
-		if (strstr(responses.c_str(),"HTTP/1.1 200 OK\r\n")!=0)
-		{
-			// Final challenge/response to actually connect...
-			message = "USR 4 TWN S ";
-			if (strstr(responses.c_str(),NEXUSAUTHKEY))
-			{
-				responses = StrUtils::SubStr(responses,responses.find(NEXUSAUTHKEY),responses.length());
-				responses = StrUtils::SubStr(responses,strlen(NEXUSAUTHKEY),responses.length());
-			}
-			else
-			{
-				responses = StrUtils::SubStr(responses,responses.find(NEXUSAUTHKEYALT),responses.length());
-				responses = StrUtils::SubStr(responses,strlen(NEXUSAUTHKEYALT),responses.length());
-			}
-			responses = StrUtils::SubStr(responses,0,responses.rfind("'"));
-			responses = StrUtils::SubStr(responses,(responses.find("'")+1),responses.length());
-			message += responses;
-			message += "\r\n";
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, message.c_str());
+      if (!GetNetOps()->Talk(&message, &responses)) {
+        SetError(GetNetOps()->GetError());
+        return false;
+      }
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, responses.c_str());
 
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
-			if (!GetNetOps()->Talk(&message, &responses))
-			{
-				SetError(GetNetOps()->GetError());
-				return false;
-			}
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+      if (strstr(responses.c_str(), " OK ")) {
+        // User logged in okay
+        size_t pos = 0;
 
-			if (strstr(responses.c_str()," OK "))
-			{
-				// User logged in okay
-				size_t pos = 0;
+        // Tokenise the std::string we have and get the details we need
+        for (int xx = 0; xx < 4; xx++) {
+          pos = responses.find(" ");
+          responses = StrUtils::SubStr(responses, pos + 1, responses.length());
+        }
+        responses = StrUtils::SubStr(responses, 0, (responses.length() - 6));
+        SetAlias(&responses);
+        return (true);
+      } else {
+        SetError(" - Final login challenge failed ");
+        return false;
+      }
+    } else if (strstr(responses.c_str(), "HTTP/1.1 401 Unauthorized\r\n") !=
+               0) {
+      SetError(" - The authentication server rejected the connection attempt - "
+               "wrong password? ");
+      return false;
+    } else if (strstr(responses.c_str(), "HTTP/1.1 302 Found\r\n") != 0) {
+      // Another re-direct...
+      // TODO - code
+      // Look for "Location:" get the URL, strip the
+      // https://loginnet.passport.com/login2.srf?lc=1033
+      // to get hostname and URL and then try again with the above stuff
+      return false;
+    }
+  }
 
-				//Tokenise the std::string we have and get the details we need
-				for(int xx=0;xx<4;xx++)
-				{
-					pos = responses.find(" ");
-					responses = StrUtils::SubStr(responses,pos+1,responses.length());
-				}
-				responses = StrUtils::SubStr(responses,0,(responses.length()-6));
-				SetAlias(&responses);
-				return(true);
-			}
-			else
-			{
-				SetError(" - Final login challenge failed ");
-				return false;
-			}
-		}
-		else if (strstr(responses.c_str(),"HTTP/1.1 401 Unauthorized\r\n")!=0)
-		{
-			SetError(" - The authentication server rejected the connection attempt - wrong password? ");
-			return false;
-		}
-		else if (strstr(responses.c_str(),"HTTP/1.1 302 Found\r\n")!=0)
-		{
-			// Another re-direct...
-			// TODO - code
-			// Look for "Location:" get the URL, strip the
-			// https://loginnet.passport.com/login2.srf?lc=1033
-			// to get hostname and URL and then try again with the above stuff
-			return false;
-		}
-	}
-
-	return false;
+  return false;
 }
 
 ///
@@ -772,30 +732,27 @@ Msn::MSNP8_Login(void)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::Disconnect()
-{
-	if (GetNetOps())
-	{
-		if (IsConnected())
-		{
-			// Setup the message
-			std::string message;
-			std::string responses;
+bool Msn::Disconnect() {
+  if (GetNetOps()) {
+    if (IsConnected()) {
+      // Setup the message
+      std::string message;
+      std::string responses;
 
-			if (GetProtocol() == MSNP8)
-				message = "OUT\r\n";
+      if (GetProtocol() == MSNP8)
+        message = "OUT\r\n";
 
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, message.c_str());
 
-			if (!IsDryRun())
-				(void)GetNetOps()->Talk(&message, NULL, true);
-			GetNetOps()->Disconnect();
-		}
-	}
-	m_bConnect=false;
-	return true;
+      if (!IsDryRun())
+        (void)GetNetOps()->Talk(&message, NULL, true);
+      GetNetOps()->Disconnect();
+    }
+  }
+  m_bConnect = false;
+  return true;
 }
 
 ///
@@ -811,83 +768,78 @@ Msn::Disconnect()
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::SetMSNStatus(const char *status)
-{
-	std::string response;
-	return SetMSNStatus(status, &response);
+bool Msn::SetMSNStatus(const char *status) {
+  std::string response;
+  return SetMSNStatus(status, &response);
 }
 
-bool
-Msn::SetMSNStatus(const char *status, std::string *repStr)
-{
-	std::string state;
-	bool bRet = false;
+bool Msn::SetMSNStatus(const char *status, std::string *repStr) {
+  std::string state;
+  bool bRet = false;
 
-	if (status == 0 || !IsConnected())
-		return bRet;
-	else
-	{
-		//
-		// Accepted values are available, busy, idle, brb, away, phone or out-to-lunch
-		// These get translated to
-		// * NLN - Available
-		// * BSY - Busy
-		// * IDL - Idle
-		// * BRB - Be Right Back
-		// * AWY - Away
-		// * PHN - On the Phone
-		// * LUN - Out to Lunch
-		//
-		if (!strcasecmp(status, "available"))
-			state = "NLN";
-		else if (!strcasecmp(status, "busy"))
-			state = "BSY";
-		else if (!strcasecmp(status, "idle"))
-			state = "IDL";
-		else if (!strcasecmp(status, "brb"))
-			state = "BRB";
-		else if (!strcasecmp(status, "away"))
-			state = "AWY";
-		else if (!strcasecmp(status, "phone"))
-			state = "PHN";
-		else if (!strcasecmp(status, "out-to-lunch"))
-			state = "LUN";
-		else
-		{
-			SetError(" - An unrecognised status was specified ");
-			return bRet;
-		}
-	}
+  if (status == 0 || !IsConnected())
+    return bRet;
+  else {
+    //
+    // Accepted values are available, busy, idle, brb, away, phone or
+    // out-to-lunch These get translated to
+    // * NLN - Available
+    // * BSY - Busy
+    // * IDL - Idle
+    // * BRB - Be Right Back
+    // * AWY - Away
+    // * PHN - On the Phone
+    // * LUN - Out to Lunch
+    //
+    if (!strcasecmp(status, "available"))
+      state = "NLN";
+    else if (!strcasecmp(status, "busy"))
+      state = "BSY";
+    else if (!strcasecmp(status, "idle"))
+      state = "IDL";
+    else if (!strcasecmp(status, "brb"))
+      state = "BRB";
+    else if (!strcasecmp(status, "away"))
+      state = "AWY";
+    else if (!strcasecmp(status, "phone"))
+      state = "PHN";
+    else if (!strcasecmp(status, "out-to-lunch"))
+      state = "LUN";
+    else {
+      SetError(" - An unrecognised status was specified ");
+      return bRet;
+    }
+  }
 
-	// Setup the message
-	std::string message;
-	std::string responses;
+  // Setup the message
+  std::string message;
+  std::string responses;
 
-	message = "CHG ";
-	message += *GetNTriId();
-	message += " ";
-	message += state;
-	message += " 0\r\n";
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  message = "CHG ";
+  message += *GetNTriId();
+  message += " ";
+  message += state;
+  message += " 0\r\n";
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	*repStr = responses;
-	return true;
+  *repStr = responses;
+  return true;
 }
 
 ///
@@ -903,64 +855,59 @@ Msn::SetMSNStatus(const char *status, std::string *repStr)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::MSNSynch(void)
-{
-	bool bRet = false;
+bool Msn::MSNSynch(void) {
+  bool bRet = false;
 
-	// Setup the message
-	std::string message;
-	std::string responses;
+  // Setup the message
+  std::string message;
+  std::string responses;
 
-	if (GetProtocol() == MSNP8)
-	{
-		message = "SYN ";
-		message += *GetNTriId();
-		message += " synchversion\r\n";
-	}
+  if (GetProtocol() == MSNP8) {
+    message = "SYN ";
+    message += *GetNTriId();
+    message += " synchversion\r\n";
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	std::string groups;
+  std::string groups;
 
-	if ((responses.find("LSG") != std::string::npos) ||
-		(responses.find("LST") != std::string::npos))
-		groups = responses;
+  if ((responses.find("LSG") != std::string::npos) ||
+      (responses.find("LST") != std::string::npos))
+    groups = responses;
 
-	m_bConnect = true;
-	bRet = SetMSNStatus("available", &responses);
+  m_bConnect = true;
+  bRet = SetMSNStatus("available", &responses);
 
-	if ((responses.find("LSG") != std::string::npos) ||
-		(responses.find("LST") != std::string::npos))
-		groups += responses;
+  if ((responses.find("LSG") != std::string::npos) ||
+      (responses.find("LST") != std::string::npos))
+    groups += responses;
 
+  while ((responses.find("QNG") == std::string::npos) && bRet) {
+    bRet = MSNPing(&responses);
+    if ((responses.find("LSG") != std::string::npos) ||
+        (responses.find("LST") != std::string::npos))
+      groups += responses;
+  }
 
-	while((responses.find("QNG") == std::string::npos) && bRet)
-	{
-		bRet = MSNPing(&responses);
-		if ((responses.find("LSG") != std::string::npos) ||
-			(responses.find("LST") != std::string::npos))
-			groups += responses;
-	}
-
-
-	ParseGrpAndUsrs(&groups);
-	return(RestartMonitor());
+  ParseGrpAndUsrs(&groups);
+  return (RestartMonitor());
 }
 
 ///
@@ -976,17 +923,14 @@ Msn::MSNSynch(void)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::RestartMonitor(void)
-{
-	m_Thread.SetFunction(ProcessCallback);
-	m_Thread.SetParam((void *)this);
+bool Msn::RestartMonitor(void) {
+  m_Thread.SetFunction(ProcessCallback);
+  m_Thread.SetParam((void *)this);
 #ifndef _WIN32
-	m_Thread.SetAttribute(PTHREAD_CREATE_DETACHED);
+  m_Thread.SetAttribute(PTHREAD_CREATE_DETACHED);
 #endif
-	return(m_Thread.Start()==0);
+  return (m_Thread.Start() == 0);
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -1001,49 +945,46 @@ Msn::RestartMonitor(void)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::MSNPing(void)
-{
-	std::string response;
-	return MSNPing(&response);
+bool Msn::MSNPing(void) {
+  std::string response;
+  return MSNPing(&response);
 }
 
-bool
-Msn::MSNPing(std::string *respStr)
-{
-	bool bRet = false;
+bool Msn::MSNPing(std::string *respStr) {
+  bool bRet = false;
 
-	// Setup the message
-	std::string message;
-	std::string responses;
+  // Setup the message
+  std::string message;
+  std::string responses;
 
-	message = "PNG\r\n";
+  message = "PNG\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	*respStr = responses;
+  *respStr = responses;
 
-	if (responses.empty())
-		bRet = false;
-	else
-		bRet = true;
+  if (responses.empty())
+    bRet = false;
+  else
+    bRet = true;
 
-	return bRet;
+  return bRet;
 }
 
 ///
@@ -1060,36 +1001,33 @@ Msn::MSNPing(std::string *respStr)
 ///
 #include <openssl/md5.h>
 
-bool
-Msn::MD5Calc(const std::string *val, std::string *hexCode)
-{
-#define dc2hx(c) ((c<10) ? (c+'0') : (c-10+'a'))
+bool Msn::MD5Calc(const std::string *val, std::string *hexCode) {
+#define dc2hx(c) ((c < 10) ? (c + '0') : (c - 10 + 'a'))
 
-	unsigned char ms5hash[MD5_DIGEST_LENGTH];
-	unsigned char ms5str[(MD5_DIGEST_LENGTH*2)+1];
-	size_t len=val->length();
-	int x = 0;
-	int y = 0;
-	const char *s= val->c_str();
+  unsigned char ms5hash[MD5_DIGEST_LENGTH];
+  unsigned char ms5str[(MD5_DIGEST_LENGTH * 2) + 1];
+  size_t len = val->length();
+  int x = 0;
+  int y = 0;
+  const char *s = val->c_str();
 
-	// Use OpenSSL routines to generate a MD5 digest hash...
-	MD5_CTX cb={0};
-	MD5_Init(&cb);
-	MD5_Update(&cb,s,len);
-	MD5_Final(ms5hash,&cb);
+  // Use OpenSSL routines to generate a MD5 digest hash...
+  MD5_CTX cb = {0};
+  MD5_Init(&cb);
+  MD5_Update(&cb, s, len);
+  MD5_Final(ms5hash, &cb);
 
-	// Use a bit of bitwise mapping to convert md5 digest to a std::string we can use...
-	// This is a bit ugly, but does the job ^_^
-	for (x = 0; x < MD5_DIGEST_LENGTH; x++)
-	{
-		y = ms5hash[x]%MD5_DIGEST_LENGTH;
-		ms5str[x*2] = dc2hx((ms5hash[x]-y)/MD5_DIGEST_LENGTH);
-		ms5str[x*2+1] = dc2hx(y);
-	}
+  // Use a bit of bitwise mapping to convert md5 digest to a std::string we can
+  // use... This is a bit ugly, but does the job ^_^
+  for (x = 0; x < MD5_DIGEST_LENGTH; x++) {
+    y = ms5hash[x] % MD5_DIGEST_LENGTH;
+    ms5str[x * 2] = dc2hx((ms5hash[x] - y) / MD5_DIGEST_LENGTH);
+    ms5str[x * 2 + 1] = dc2hx(y);
+  }
 
-	ms5str[(MD5_DIGEST_LENGTH*2)] = 0;
-	*hexCode = (char *)ms5str;
-	return true;
+  ms5str[(MD5_DIGEST_LENGTH * 2)] = 0;
+  *hexCode = (char *)ms5str;
+  return true;
 }
 
 ///
@@ -1105,66 +1043,64 @@ Msn::MD5Calc(const std::string *val, std::string *hexCode)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::MSNChallengeResponse(const std::string *challenge)
-{
-	bool bRet = false;
+bool Msn::MSNChallengeResponse(const std::string *challenge) {
+  bool bRet = false;
 
-	if (!IsConnected() || !challenge || challenge->empty())
-		return false;
+  if (!IsConnected() || !challenge || challenge->empty())
+    return false;
 
-	// The challenge will be something like
-	// CHL 0 15570131571988941333\r\n
-	// We want the 3 std::string.
-	std::string chlId = *challenge;
-	chlId = StrUtils::SubStr(chlId,6,20);
-	//
-	// Need to add the product code for my fake msn client
-	// Options are
-	//
-	//Client ID std::string		Client ID code
-	//
-	//msmsgs@msnmsgr.com 	Q1P7W2E4J9R8U3S5
-	//PROD0038W!61ZTF9		VT6PX?UQTM4WM%YR
-	//PROD0058#7IL2{QD		QHDCY@7R1TB6W?5B
-	//PROD0061VRRZH@4F		JXQ6J@TUOGYV@N0M
-	//PROD00504RLUG%WL		I2EBK%PYNLZL5_J4
-	//PROD0076ENE8*@AW		CEQJ8}OE0!WTSWII
-	//
-	// Using MSN client
-	//
-	chlId += "Q1P7W2E4J9R8U3S5";
-	(void)MD5Calc(&chlId,&chlId);
+  // The challenge will be something like
+  // CHL 0 15570131571988941333\r\n
+  // We want the 3 std::string.
+  std::string chlId = *challenge;
+  chlId = StrUtils::SubStr(chlId, 6, 20);
+  //
+  // Need to add the product code for my fake msn client
+  // Options are
+  //
+  // Client ID std::string		Client ID code
+  //
+  // msmsgs@msnmsgr.com 	Q1P7W2E4J9R8U3S5
+  // PROD0038W!61ZTF9		VT6PX?UQTM4WM%YR
+  // PROD0058#7IL2{QD		QHDCY@7R1TB6W?5B
+  // PROD0061VRRZH@4F		JXQ6J@TUOGYV@N0M
+  // PROD00504RLUG%WL		I2EBK%PYNLZL5_J4
+  // PROD0076ENE8*@AW		CEQJ8}OE0!WTSWII
+  //
+  // Using MSN client
+  //
+  chlId += "Q1P7W2E4J9R8U3S5";
+  (void)MD5Calc(&chlId, &chlId);
 
-	// Setup the message
-	std::string message;
-	std::string responses;
+  // Setup the message
+  std::string message;
+  std::string responses;
 
-	message = "QRY ";
-	message += *GetNTriId();
-	message += " msmsgs@msnmsgr.com 32\r\n";
-	message += chlId;
+  message = "QRY ";
+  message += *GetNTriId();
+  message += " msmsgs@msnmsgr.com 32\r\n";
+  message += chlId;
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	return true;
+  return true;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -1179,118 +1115,100 @@ Msn::MSNChallengeResponse(const std::string *challenge)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::ProcessCalls(void)
-{
-	bool bCont = true;
-	std::string message;
-	int read = 0;
-	int count = 0;
+bool Msn::ProcessCalls(void) {
+  bool bCont = true;
+  std::string message;
+  int read = 0;
+  int count = 0;
 
-	// Set blocking mode to false
-	GetNetOps()->SetBlock(false);
-	GetNetOps()->SetSocketTimeOut(5000);
+  // Set blocking mode to false
+  GetNetOps()->SetBlock(false);
+  GetNetOps()->SetSocketTimeOut(5000);
 
-	while(bCont)
-	{
+  while (bCont) {
 #ifdef _WIN32
-		if (!TestTagFile())
-		{
-			bCont = false;
-			break;
-		}
+    if (!TestTagFile()) {
+      bCont = false;
+      break;
+    }
 #endif
-		while(!message.empty()  && (read > 0))
-		{
-			std::string msg2Process = StrUtils::SubStr(message,0,message.find("\r\n"));
-			std::string msnCode = StrUtils::SubStr(msg2Process,0,message.find(" "));
+    while (!message.empty() && (read > 0)) {
+      std::string msg2Process =
+          StrUtils::SubStr(message, 0, message.find("\r\n"));
+      std::string msnCode = StrUtils::SubStr(msg2Process, 0, message.find(" "));
 
-			if (msnCode.empty())
-				msnCode = StrUtils::SubStr(msg2Process,0,message.find("\r"));
-			if (msnCode.empty())
-				StrUtils::Trim(message);
-			else
-			{
-				if (msnCode == "QRY")
-				{
-				}
-				else if (msnCode == "CHL")
-				{
-					// * CHL - Client challenge
-					if (!MSNChallengeResponse(&msg2Process))
-						std::cerr << GetNetOps()->GetError();
-				}
-				else if (msnCode == "FLN")
-				{
-					// * FLN - Principal signed off
-					std::string contacts = StrUtils::SubStr(msg2Process,5,msg2Process.length());
-					RemoveContact(&contacts);
-				}
-				else if (msnCode == "NLN")
-				{
-					// * NLN - Principal changed presence/signed on
-					std::string contacts = StrUtils::SubStr(msg2Process,5,msg2Process.length());
-					AddContact(&contacts);
-				}
-				else if (msnCode == "RNG" && IsMessagesAllowed())
-				{
-					// * RNG - Client invited to chat session
-					// RNG sessid address authtype ticket invitepassport invitename\r\n
-					if (!MSNChat(&msg2Process))
-						std::cerr << GetNetOps()->GetError();
-				}
-				else if (msnCode == "QNG")
-				{
-					// * Ping response - ignore for now
-				}
-				else
-				{
-				}
-				message = StrUtils::SubStr(message,message.find("\r\n"),message.length());
-				if (message == "\r\n")
-					message = "";
-			}
-		}
+      if (msnCode.empty())
+        msnCode = StrUtils::SubStr(msg2Process, 0, message.find("\r"));
+      if (msnCode.empty())
+        StrUtils::Trim(message);
+      else {
+        if (msnCode == "QRY") {
+        } else if (msnCode == "CHL") {
+          // * CHL - Client challenge
+          if (!MSNChallengeResponse(&msg2Process))
+            std::cerr << GetNetOps()->GetError();
+        } else if (msnCode == "FLN") {
+          // * FLN - Principal signed off
+          std::string contacts =
+              StrUtils::SubStr(msg2Process, 5, msg2Process.length());
+          RemoveContact(&contacts);
+        } else if (msnCode == "NLN") {
+          // * NLN - Principal changed presence/signed on
+          std::string contacts =
+              StrUtils::SubStr(msg2Process, 5, msg2Process.length());
+          AddContact(&contacts);
+        } else if (msnCode == "RNG" && IsMessagesAllowed()) {
+          // * RNG - Client invited to chat session
+          // RNG sessid address authtype ticket invitepassport invitename\r\n
+          if (!MSNChat(&msg2Process))
+            std::cerr << GetNetOps()->GetError();
+        } else if (msnCode == "QNG") {
+          // * Ping response - ignore for now
+        } else {
+        }
+        message =
+            StrUtils::SubStr(message, message.find("\r\n"), message.length());
+        if (message == "\r\n")
+          message = "";
+      }
+    }
 
-		if (count>180)
-		{
-			// We haven't seen any data for 100 times around. Is the socket okay?
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] Doing remote socket check", __FILE__, __LINE__);
+    if (count > 180) {
+      // We haven't seen any data for 100 times around. Is the socket okay?
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO,
+                                     "Debug: [%s,%d] Doing remote socket check",
+                                     __FILE__, __LINE__);
 
-			if (!MSNPing(&message))
-			{
-				// Oh dear, the socket seems to have gone south for the winter...
-				bCont = false;
-			}
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] Socket seems %s", __FILE__, __LINE__, ((bCont) ? "ok" : "dead"));
-			count = -1;
-		}
+      if (!MSNPing(&message)) {
+        // Oh dear, the socket seems to have gone south for the winter...
+        bCont = false;
+      }
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] Socket seems %s",
+                                     __FILE__, __LINE__,
+                                     ((bCont) ? "ok" : "dead"));
+      count = -1;
+    }
 
-		// If I read a message as a result of my ping - process it
-		if (count == -1 && !message.empty())
-		{
-		}
-		else
-		{
-			if (!GetNetOps()->GetBinMsg(&read,message))
-				bCont = false;
-		}
+    // If I read a message as a result of my ping - process it
+    if (count == -1 && !message.empty()) {
+    } else {
+      if (!GetNetOps()->GetBinMsg(&read, message))
+        bCont = false;
+    }
 
-		if (read > 0)
-		{
-			count=0;
-			if (IsDebug())
-				(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
-		}
-		else
-			count++;
-	}
+    if (read > 0) {
+      count = 0;
+      if (IsDebug())
+        (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                     __LINE__, message.c_str());
+    } else
+      count++;
+  }
 
-	return true;
+  return true;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -1305,43 +1223,38 @@ Msn::ProcessCalls(void)
 //----------------------------------------------------------------------------
 ///
 
-void
-Msn::ParseGrpAndUsrs(const std::string *pStr)
-{
-	// LSG is the keyword for groups
-	// LST is the keyword for contacts
+void Msn::ParseGrpAndUsrs(const std::string *pStr) {
+  // LSG is the keyword for groups
+  // LST is the keyword for contacts
 
-	// The LSG std::string is something like
-	//  LSG 0 Other%20Contacts 0\r\n
-    //  LSG 1 Coworkers 0\r\n
-    //  LSG 2 Friends 0\r\n
-    //  LSG 3 Family 0\r\n
-	//
-	std::string list = *pStr;
+  // The LSG std::string is something like
+  //  LSG 0 Other%20Contacts 0\r\n
+  //  LSG 1 Coworkers 0\r\n
+  //  LSG 2 Friends 0\r\n
+  //  LSG 3 Family 0\r\n
+  //
+  std::string list = *pStr;
 
-	size_t pos = 0;
-	while ((pos = list.find("LSG"))!=std::string::npos)
-	{
-		list = StrUtils::SubStr(list,(pos+6),list.length());
-		std::string n = StrUtils::SubStr(list,0,list.find(" "));
-		AddGroup(&n);
-	}
+  size_t pos = 0;
+  while ((pos = list.find("LSG")) != std::string::npos) {
+    list = StrUtils::SubStr(list, (pos + 6), list.length());
+    std::string n = StrUtils::SubStr(list, 0, list.find(" "));
+    AddGroup(&n);
+  }
 
-	// Now do users
-	// These are in the format
-	//  LST dave@passport.com 1 1,2
-	list = *pStr;
+  // Now do users
+  // These are in the format
+  //  LST dave@passport.com 1 1,2
+  list = *pStr;
 
-	while ((pos = list.find("LST"))!=std::string::npos)
-	{
-		list = StrUtils::SubStr(list,(pos+4),list.length());
-		std::string n = StrUtils::SubStr(list,0,list.find(" "));
-		AddContact(&n);
-	}
+  while ((pos = list.find("LST")) != std::string::npos) {
+    list = StrUtils::SubStr(list, (pos + 4), list.length());
+    std::string n = StrUtils::SubStr(list, 0, list.find(" "));
+    AddContact(&n);
+  }
 
-	return;
+  return;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -1356,20 +1269,18 @@ Msn::ParseGrpAndUsrs(const std::string *pStr)
 //----------------------------------------------------------------------------
 ///
 
-const std::string *
-Msn::GetNTriId()
-{
-	char str[50+1];
-	LockMutex();
-	m_TriId++;
+const std::string *Msn::GetNTriId() {
+  char str[50 + 1];
+  LockMutex();
+  m_TriId++;
 #ifndef _WIN32
-	(void)sprintf(str,"%d", m_TriId);
+  (void)sprintf(str, "%d", m_TriId);
 #else
-	(void)sprintf_s(str,50,"%d", m_TriId);
+  (void)sprintf_s(str, 50, "%d", m_TriId);
 #endif
-	m_TriIdStr = str;
-	UnlockMutex();
-	return &m_TriIdStr;
+  m_TriIdStr = str;
+  UnlockMutex();
+  return &m_TriIdStr;
 }
 
 ///
@@ -1385,39 +1296,38 @@ Msn::GetNTriId()
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::SetSwitchboardStatus(bool bStatus)
-{
-	bool bRet = false;
+bool Msn::SetSwitchboardStatus(bool bStatus) {
+  bool bRet = false;
 
-	// Setup the message
-	std::string message;
-	std::string responses;
+  // Setup the message
+  std::string message;
+  std::string responses;
 
-	message = "IMS ";
-	message += *GetNTriId();
-	message += " ";
-	message += (bStatus) ? "ON" : "OFF";
-	message += "\r\n";
+  message = "IMS ";
+  message += *GetNTriId();
+  message += " ";
+  message += (bStatus) ? "ON" : "OFF";
+  message += "\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	return true;
+  return true;
 }
 
 ///
@@ -1433,54 +1343,50 @@ Msn::SetSwitchboardStatus(bool bStatus)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::ResetAlias(const char *alias)
-{
-	std::string whoStr = alias;
-	return ResetAlias(&whoStr);
+bool Msn::ResetAlias(const char *alias) {
+  std::string whoStr = alias;
+  return ResetAlias(&whoStr);
 }
 
-bool
-Msn::ResetAlias(const std::string *alias)
-{
-	bool bRet = false;
+bool Msn::ResetAlias(const std::string *alias) {
+  bool bRet = false;
 
-	// Setup the message
-	std::string message;
-	std::string responses;
+  // Setup the message
+  std::string message;
+  std::string responses;
 
-	message = "REA ";
-	message += *GetNTriId();
-	message += " ";
-	message += *GetUser();
-	message += " ";
-	message += *alias;
-	message += "\r\n";
+  message = "REA ";
+  message += *GetNTriId();
+  message += " ";
+  message += *GetUser();
+  message += " ";
+  message += *alias;
+  message += "\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
-	if (responses.find("REA ")!=std::string::npos)
-		bRet = true;
-	else
-		bRet = false;
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
+  if (responses.find("REA ") != std::string::npos)
+    bRet = true;
+  else
+    bRet = false;
 
-	return true;
+  return true;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -1495,92 +1401,90 @@ Msn::ResetAlias(const std::string *alias)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::MSNChat(const std::string *ptr)
-{
-	std::string responses;
-	bool bRet = false;
+bool Msn::MSNChat(const std::string *ptr) {
+  std::string responses;
+  bool bRet = false;
 
-	// Function to process a comamnd like
-	// RNG sessid address authtype ticket invitepassport invitename\r\n
-	// e.g. RNG 68539665 65.54.228.22:1863 CKI 7923661.675614 example@hotmail.com Mr Example
+  // Function to process a comamnd like
+  // RNG sessid address authtype ticket invitepassport invitename\r\n
+  // e.g. RNG 68539665 65.54.228.22:1863 CKI 7923661.675614 example@hotmail.com
+  // Mr Example
 
-	// Parse the chat invite std::string
-	std::string message = *ptr;
-	message = StrUtils::SubStr(message,message.find(" ")+1, message.length());
-	std::string sbSession = StrUtils::SubStr(message,0,message.find(" "));
-	message = StrUtils::SubStr(message,message.find(" ")+1, message.length());
-	std::string sbHost = StrUtils::SubStr(message,0,message.find(" "));
-	message = StrUtils::SubStr(message,message.find(" ")+1, message.length());
-	message = StrUtils::SubStr(message,message.find(" ")+1, message.length());
-	std::string sbAuthStr = StrUtils::SubStr(message,0,message.find(" "));
-	message = StrUtils::SubStr(message,message.find(" ")+1, message.length());
-	std::string whoChat = StrUtils::SubStr(message,0,message.find(" "));
-	message = StrUtils::SubStr(message,message.find(" ")+1, message.length());
-	std::string whoChatAlias = StrUtils::SubStr(message,0,message.find("\r\n"));
+  // Parse the chat invite std::string
+  std::string message = *ptr;
+  message = StrUtils::SubStr(message, message.find(" ") + 1, message.length());
+  std::string sbSession = StrUtils::SubStr(message, 0, message.find(" "));
+  message = StrUtils::SubStr(message, message.find(" ") + 1, message.length());
+  std::string sbHost = StrUtils::SubStr(message, 0, message.find(" "));
+  message = StrUtils::SubStr(message, message.find(" ") + 1, message.length());
+  message = StrUtils::SubStr(message, message.find(" ") + 1, message.length());
+  std::string sbAuthStr = StrUtils::SubStr(message, 0, message.find(" "));
+  message = StrUtils::SubStr(message, message.find(" ") + 1, message.length());
+  std::string whoChat = StrUtils::SubStr(message, 0, message.find(" "));
+  message = StrUtils::SubStr(message, message.find(" ") + 1, message.length());
+  std::string whoChatAlias = StrUtils::SubStr(message, 0, message.find("\r\n"));
 
-	// Connect to the switch board provided
-	MsnChatSessions *sbRemoteHost = new MsnChatSessions(&sbHost,GetProtocol());
+  // Connect to the switch board provided
+  MsnChatSessions *sbRemoteHost = new MsnChatSessions(&sbHost, GetProtocol());
 
-	sbRemoteHost->SetWho(&whoChat);
-	sbRemoteHost->SetAlias(&whoChatAlias);
-	sbRemoteHost->SetWhoAmI(GetUser());
-	sbRemoteHost->SetWhoAmIAlias(GetAlias());
-	sbRemoteHost->SetProtocol(GetProtocol());
-	sbRemoteHost->SetDebug(IsDebug());
-	sbRemoteHost->SetDryRun(IsDryRun());
-	sbRemoteHost->GetNetOps()->SetNonBlocking(true);
-	sbRemoteHost->GetNetOps()->SetDebug(IsDebug());
+  sbRemoteHost->SetWho(&whoChat);
+  sbRemoteHost->SetAlias(&whoChatAlias);
+  sbRemoteHost->SetWhoAmI(GetUser());
+  sbRemoteHost->SetWhoAmIAlias(GetAlias());
+  sbRemoteHost->SetProtocol(GetProtocol());
+  sbRemoteHost->SetDebug(IsDebug());
+  sbRemoteHost->SetDryRun(IsDryRun());
+  sbRemoteHost->GetNetOps()->SetNonBlocking(true);
+  sbRemoteHost->GetNetOps()->SetDebug(IsDebug());
 
-	if (!sbRemoteHost->GetNetOps()->Connect())
-	{
-		SetError(sbRemoteHost->GetNetOps()->GetError());
-		return false;
-	}
+  if (!sbRemoteHost->GetNetOps()->Connect()) {
+    SetError(sbRemoteHost->GetNetOps()->GetError());
+    return false;
+  }
 
-	// Construct a hello message for the switch board...
-	message = "ANS ";
-	message += *GetNTriId();
-	message += " ";
-	message += *GetUser();
-	message += " ";
-	message += sbAuthStr;
-	message += " ";
-	message += sbSession;
-	message += "\r\n";
+  // Construct a hello message for the switch board...
+  message = "ANS ";
+  message += *GetNTriId();
+  message += " ";
+  message += *GetUser();
+  message += " ";
+  message += sbAuthStr;
+  message += " ";
+  message += sbSession;
+  message += "\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = sbRemoteHost->GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = sbRemoteHost->GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(sbRemoteHost->GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(sbRemoteHost->GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	int rc = 0;
+  int rc = 0;
 
-	// Register the chat callback and launch the process...
-	sbRemoteHost->GetThread()->SetFunction(ChatCallback);
-	sbRemoteHost->GetThread()->SetParam((void*)sbRemoteHost);
-	sbRemoteHost->GetNetOps()->SetBlock(false);
-	sbRemoteHost->SetReply2RemoteChat(true);
-	if (GetFunction())
-		sbRemoteHost->SetFunction(GetFunction());
-	rc = sbRemoteHost->StartChat();
+  // Register the chat callback and launch the process...
+  sbRemoteHost->GetThread()->SetFunction(ChatCallback);
+  sbRemoteHost->GetThread()->SetParam((void *)sbRemoteHost);
+  sbRemoteHost->GetNetOps()->SetBlock(false);
+  sbRemoteHost->SetReply2RemoteChat(true);
+  if (GetFunction())
+    sbRemoteHost->SetFunction(GetFunction());
+  rc = sbRemoteHost->StartChat();
 
-	GetChats()->push_back(sbRemoteHost);
-	return true;
+  GetChats()->push_back(sbRemoteHost);
+  return true;
 }
-
 
 ///
 //----------------------------------------------------------------------------
@@ -1595,239 +1499,229 @@ Msn::MSNChat(const std::string *ptr)
 //----------------------------------------------------------------------------
 ///
 
-bool
-Msn::StartChat(const char *who)
-{
-	std::string whoStr = who;
-	return StartChat(&whoStr);
+bool Msn::StartChat(const char *who) {
+  std::string whoStr = who;
+  return StartChat(&whoStr);
 }
 
-bool
-Msn::StartChat(const std::string *who)
-{
-	bool bRet = false;
+bool Msn::StartChat(const std::string *who) {
+  bool bRet = false;
 
-	// Set status online and available
-	if (!SetMSNStatus("AVAILABLE"))
-	{
-		SetError(" - Unable to set status online");
-		return bRet;
-	}
+  // Set status online and available
+  if (!SetMSNStatus("AVAILABLE")) {
+    SetError(" - Unable to set status online");
+    return bRet;
+  }
 
-	// Setup the message to request a switchboard session
-	std::string message;
-	std::string responses;
+  // Setup the message to request a switchboard session
+  std::string message;
+  std::string responses;
 
-	message = "XFR ";
-	message += *GetNTriId();
-	message += " ";
-	message += "SB\r\n";
+  message = "XFR ";
+  message += *GetNTriId();
+  message += " ";
+  message += "SB\r\n";
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (!IsDryRun())
-		bRet = GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (!IsDryRun())
+    bRet = GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	if (!bRet)
-	{
-		SetError(GetNetOps()->GetError());
-		return bRet;
-	}
+  if (!bRet) {
+    SetError(GetNetOps()->GetError());
+    return bRet;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
-	///
-	/// Check status
-	/// Need a std::string like "XFR 9 SB 207.46.108.46:1863 CKI 189597.1056411784.29994\r\n"
-	///
-	StrUtils::Trim(responses);
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
+  ///
+  /// Check status
+  /// Need a std::string like "XFR 9 SB 207.46.108.46:1863 CKI
+  /// 189597.1056411784.29994\r\n"
+  ///
+  StrUtils::Trim(responses);
 
-	std::string sbHost = StrUtils::SubStr(responses, (responses.find("SB ")+3), (responses.find("CKI")-1));
-	StrUtils::Trim(sbHost);
-	sbHost = StrUtils::SubStr(sbHost,0,sbHost.find(" "));
+  std::string sbHost = StrUtils::SubStr(responses, (responses.find("SB ") + 3),
+                                        (responses.find("CKI") - 1));
+  StrUtils::Trim(sbHost);
+  sbHost = StrUtils::SubStr(sbHost, 0, sbHost.find(" "));
 
-	std::string sbSession = StrUtils::SubStr(responses, (responses.find("CKI ")+3), responses.length());
-	StrUtils::Trim(sbHost);
-	StrUtils::Trim(sbSession);
+  std::string sbSession = StrUtils::SubStr(
+      responses, (responses.find("CKI ") + 3), responses.length());
+  StrUtils::Trim(sbHost);
+  StrUtils::Trim(sbSession);
 
-	// Connect to the switch board provided
-	MsnChatSessions *sbRemoteHost = new MsnChatSessions(&sbHost,GetProtocol());
+  // Connect to the switch board provided
+  MsnChatSessions *sbRemoteHost = new MsnChatSessions(&sbHost, GetProtocol());
 
-	sbRemoteHost->SetWho(who);
-	sbRemoteHost->SetWhoAmI(GetUser());
-	sbRemoteHost->SetWhoAmIAlias(GetAlias());
-	
-	sbRemoteHost->SetDebug(IsDebug());
-	sbRemoteHost->SetDryRun(IsDryRun());
-	sbRemoteHost->GetNetOps()->SetNonBlocking(true);
+  sbRemoteHost->SetWho(who);
+  sbRemoteHost->SetWhoAmI(GetUser());
+  sbRemoteHost->SetWhoAmIAlias(GetAlias());
 
-	if (!sbRemoteHost->GetNetOps()->Connect())
-	{
-		SetError(sbRemoteHost->GetNetOps()->GetError());
-		delete sbRemoteHost;
-		return false;
-	}
+  sbRemoteHost->SetDebug(IsDebug());
+  sbRemoteHost->SetDryRun(IsDryRun());
+  sbRemoteHost->GetNetOps()->SetNonBlocking(true);
 
-	/// Construct a hello message for the switch board...
-	message = "USR ";
-	message += *GetNTriId();
-	message += " ";
-	message += *GetUser();
-	message += " ";
-	message += sbSession;
-	message += "\r\n";
+  if (!sbRemoteHost->GetNetOps()->Connect()) {
+    SetError(sbRemoteHost->GetNetOps()->GetError());
+    delete sbRemoteHost;
+    return false;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  /// Construct a hello message for the switch board...
+  message = "USR ";
+  message += *GetNTriId();
+  message += " ";
+  message += *GetUser();
+  message += " ";
+  message += sbSession;
+  message += "\r\n";
 
-	if (!IsDryRun())
-		bRet = sbRemoteHost->GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (!IsDryRun())
+    bRet = sbRemoteHost->GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	// Check if I was cool with the MSN server...
-	std::string code2Check = "USR ";
-	code2Check += *GetCTriId();
-	code2Check += " OK";
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, code2Check.c_str());
+  // Check if I was cool with the MSN server...
+  std::string code2Check = "USR ";
+  code2Check += *GetCTriId();
+  code2Check += " OK";
 
-	if (responses.find(code2Check)==std::string::npos)
-	{
-		SetError(" - The MSN switchboard rejected the attempt to initiate a chat session");
-		delete sbRemoteHost;
-		return false;
-	}
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, code2Check.c_str());
 
-	// Invite my victim into the parlor for dinner...
-	message = "CAL ";
-	message += *GetNTriId();
-	message += " ";
-	message += *who;
-	message += "\r\n";
+  if (responses.find(code2Check) == std::string::npos) {
+    SetError(" - The MSN switchboard rejected the attempt to initiate a chat "
+             "session");
+    delete sbRemoteHost;
+    return false;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, message.c_str());
+  // Invite my victim into the parlor for dinner...
+  message = "CAL ";
+  message += *GetNTriId();
+  message += " ";
+  message += *who;
+  message += "\r\n";
 
-	if (!IsDryRun())
-		bRet = sbRemoteHost->GetNetOps()->Talk(&message, &responses);
-	else
-		bRet = true;
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, message.c_str());
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (!IsDryRun())
+    bRet = sbRemoteHost->GetNetOps()->Talk(&message, &responses);
+  else
+    bRet = true;
 
-	code2Check = "CAL ";
-	code2Check += *GetCTriId();
-	code2Check += " RINGING";
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	if (responses.find(code2Check)==std::string::npos)
-	{
-		code2Check = "217 ";
-		code2Check += *GetCTriId();
+  code2Check = "CAL ";
+  code2Check += *GetCTriId();
+  code2Check += " RINGING";
 
-		if (responses.find(code2Check)!=std::string::npos)
-		{
-			code2Check = " - ";
-			code2Check += *who;
-			code2Check += " is not online";
-		}
-		else
-		{
-			code2Check = "";
-			code2Check = "216 ";
-			code2Check += *GetCTriId();
+  if (responses.find(code2Check) == std::string::npos) {
+    code2Check = "217 ";
+    code2Check += *GetCTriId();
 
-			if (responses.find(code2Check)!=std::string::npos)
-			{
-				code2Check = " - ";
-				code2Check += *who;
-				code2Check += " has not authorised this contact to contact them";
-			}
-			else
-				code2Check = "";
-		}
+    if (responses.find(code2Check) != std::string::npos) {
+      code2Check = " - ";
+      code2Check += *who;
+      code2Check += " is not online";
+    } else {
+      code2Check = "";
+      code2Check = "216 ";
+      code2Check += *GetCTriId();
 
-		if (code2Check.empty())
-		{
-			code2Check = " - ";
-			code2Check += *who;
-			code2Check += " did not accept the chat request";
-		}
+      if (responses.find(code2Check) != std::string::npos) {
+        code2Check = " - ";
+        code2Check += *who;
+        code2Check += " has not authorised this contact to contact them";
+      } else
+        code2Check = "";
+    }
 
-		SetError(&code2Check);
-		delete sbRemoteHost;
-		return false;
-	}
+    if (code2Check.empty()) {
+      code2Check = " - ";
+      code2Check += *who;
+      code2Check += " did not accept the chat request";
+    }
 
-	if (!IsDryRun())
-		bRet = sbRemoteHost->GetNetOps()->Talk("", &responses);
-	else
-		bRet = true;
+    SetError(&code2Check);
+    delete sbRemoteHost;
+    return false;
+  }
 
-	if (IsDebug())
-		(void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__, __LINE__, responses.c_str());
+  if (!IsDryRun())
+    bRet = sbRemoteHost->GetNetOps()->Talk("", &responses);
+  else
+    bRet = true;
 
-	code2Check = "JOI ";
-	code2Check += *who;
+  if (IsDebug())
+    (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
+                                 __LINE__, responses.c_str());
 
-	if (responses.find(code2Check)==std::string::npos)
-	{
-		code2Check = "217 ";
-		code2Check += *GetCTriId();
+  code2Check = "JOI ";
+  code2Check += *who;
 
-		if (responses.find(code2Check)!=std::string::npos)
-		{
-			code2Check = " - ";
-			code2Check += *who;
-			code2Check += " is not online";
-		}
-		else
-		{
-			code2Check = "";
-			code2Check = "216 ";
-			code2Check += *GetCTriId();
+  if (responses.find(code2Check) == std::string::npos) {
+    code2Check = "217 ";
+    code2Check += *GetCTriId();
 
-			if (responses.find(code2Check)!=std::string::npos)
-			{
-				code2Check = " - ";
-				code2Check += *who;
-				code2Check += " has not authorised this contact to contact them";
-			}
-			else
-				code2Check = "";
-		}
+    if (responses.find(code2Check) != std::string::npos) {
+      code2Check = " - ";
+      code2Check += *who;
+      code2Check += " is not online";
+    } else {
+      code2Check = "";
+      code2Check = "216 ";
+      code2Check += *GetCTriId();
 
-		if (code2Check.empty())
-		{
-			code2Check = " - ";
-			code2Check += *who;
-			code2Check += " did not accept the chat request";
-		}
+      if (responses.find(code2Check) != std::string::npos) {
+        code2Check = " - ";
+        code2Check += *who;
+        code2Check += " has not authorised this contact to contact them";
+      } else
+        code2Check = "";
+    }
 
-		SetError(&code2Check);
-		delete sbRemoteHost;
-		return false;
-	}
+    if (code2Check.empty()) {
+      code2Check = " - ";
+      code2Check += *who;
+      code2Check += " did not accept the chat request";
+    }
 
-	int rc = 0;
+    SetError(&code2Check);
+    delete sbRemoteHost;
+    return false;
+  }
 
-	// Register the chat callback and launch the process...
-	sbRemoteHost->GetThread()->SetFunction(ChatCallback);
-	sbRemoteHost->GetThread()->SetParam((void*)sbRemoteHost);
-	sbRemoteHost->GetNetOps()->SetBlock(false);
-	sbRemoteHost->SetReply2RemoteChat(false);
-	if (GetFunction())
-		sbRemoteHost->SetFunction(GetFunction());
-	rc = sbRemoteHost->StartChat();
+  int rc = 0;
 
-	GetChats()->push_back(sbRemoteHost);
-	return true;
+  // Register the chat callback and launch the process...
+  sbRemoteHost->GetThread()->SetFunction(ChatCallback);
+  sbRemoteHost->GetThread()->SetParam((void *)sbRemoteHost);
+  sbRemoteHost->GetNetOps()->SetBlock(false);
+  sbRemoteHost->SetReply2RemoteChat(false);
+  if (GetFunction())
+    sbRemoteHost->SetFunction(GetFunction());
+  rc = sbRemoteHost->StartChat();
+
+  GetChats()->push_back(sbRemoteHost);
+  return true;
 }

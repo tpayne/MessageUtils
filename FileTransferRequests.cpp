@@ -3,7 +3,7 @@
 ///   MessengerUtils
 ///   Created by Tim Payne on 18/10/2008.
 ///   Copyright 2008 __MyCompanyName__. All rights reserved.
-///   
+///
 /// @file
 
 #include "FileTransferRequests.h"
@@ -21,33 +21,27 @@
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-FileTransfersReq::FileTransfersReq()
-{
-	init();
-}
+FileTransfersReq::FileTransfersReq() { init(); }
 
 FileTransfersReq::FileTransfersReq(const std::string &fileName,
-								   const std::string &userName,
-								   int cookie,
-								   size_t filesz)
-{
-	init();
-	SetFile(fileName);
-	SetUser(userName);
-	SetCookie(cookie);
-	SetFileSz(filesz);
+                                   const std::string &userName, int cookie,
+                                   size_t filesz) {
+  init();
+  SetFile(fileName);
+  SetUser(userName);
+  SetCookie(cookie);
+  SetFileSz(filesz);
 }
 
-FileTransfersReq::FileTransfersReq(const FileTransfersReq &val)
-{
-	init();
-	
-	m_File = val.m_File;
-	m_User = val.m_User;
-	m_Cookie = val.m_Cookie;
-	m_FileSz = val.m_FileSz;
+FileTransfersReq::FileTransfersReq(const FileTransfersReq &val) {
+  init();
+
+  m_File = val.m_File;
+  m_User = val.m_User;
+  m_Cookie = val.m_Cookie;
+  m_FileSz = val.m_FileSz;
 }
 
 ///
@@ -61,12 +55,9 @@ FileTransfersReq::FileTransfersReq(const FileTransfersReq &val)
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-FileTransfersReq::~FileTransfersReq()
-{
-	clear();
-}
+FileTransfersReq::~FileTransfersReq() { clear(); }
 
 ///
 //----------------------------------------------------------------------------
@@ -79,49 +70,39 @@ FileTransfersReq::~FileTransfersReq()
 //   Return:
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
 /// Overloading the == operator
-bool 
-FileTransfersReq::operator==(const FileTransfersReq &val) const
-{	
-	return (m_Cookie == val.m_Cookie);
+bool FileTransfersReq::operator==(const FileTransfersReq &val) const {
+  return (m_Cookie == val.m_Cookie);
 }
 
 /// Overloading the != operator
-bool 
-FileTransfersReq::operator!=(const FileTransfersReq &other) const
-{
-	return !(*this == other);
+bool FileTransfersReq::operator!=(const FileTransfersReq &other) const {
+  return !(*this == other);
 }
 
 /// Overloading the = operator
-FileTransfersReq& 
-FileTransfersReq::operator=(const FileTransfersReq &val)
-{
-	if (this == &val)
-		return *this;
-	
-	m_File = val.m_File;
-	m_User = val.m_User;
-	m_Cookie = val.m_Cookie;
-	m_FileSz = val.m_FileSz;
-	
-	return *this;
+FileTransfersReq &FileTransfersReq::operator=(const FileTransfersReq &val) {
+  if (this == &val)
+    return *this;
+
+  m_File = val.m_File;
+  m_User = val.m_User;
+  m_Cookie = val.m_Cookie;
+  m_FileSz = val.m_FileSz;
+
+  return *this;
 }
 
 /// Overloading the > operator
-bool 
-FileTransfersReq::operator>(const FileTransfersReq &other) const
-{
-	return (m_Cookie > other.m_Cookie);
+bool FileTransfersReq::operator>(const FileTransfersReq &other) const {
+  return (m_Cookie > other.m_Cookie);
 }
 
 /// Overloading the != operator
-bool 
-FileTransfersReq::operator<(const FileTransfersReq &other) const
-{
-	return (m_Cookie < other.m_Cookie);
+bool FileTransfersReq::operator<(const FileTransfersReq &other) const {
+  return (m_Cookie < other.m_Cookie);
 }
 
 ///
@@ -136,13 +117,11 @@ FileTransfersReq::operator<(const FileTransfersReq &other) const
 ///   @return void
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-void
-FileTransfersReq::clear()
-{
-	init();
-	return;
+void FileTransfersReq::clear() {
+  init();
+  return;
 }
 
 ///
@@ -157,12 +136,10 @@ FileTransfersReq::clear()
 ///   @return void
 //   Notes:
 //----------------------------------------------------------------------------
-///   
+///
 
-void
-FileTransfersReq::init()
-{
-	m_Cookie = 0;
-	m_FileSz = 0;
-	return;
+void FileTransfersReq::init() {
+  m_Cookie = 0;
+  m_FileSz = 0;
+  return;
 }
