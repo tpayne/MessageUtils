@@ -32,12 +32,12 @@ endif
 CXXFLAGS = $(CFLAGS)
 
 STRIP  =
-LD     =    g++
+LD     =	g++
 LDSHARED =  
 LDPROG =    
-LDFLAGS = -Wno-deprecated-declarations -fpermissive -Wno-deprecated
+LDFLAGS =	-Wno-deprecated-declarations -fpermissive -Wno-deprecated
 CC		=	g++
-CXX		= 	$(CC)
+CXX		=	$(CC)
 
 # Dependency rules
 $(BLDTARGET)/%.$(OBJSUF) : %.c
