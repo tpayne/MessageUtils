@@ -8,8 +8,8 @@
 
 #include <iostream>
 #ifndef _WIN32
-#include <thread>
 #include <sys/utsname.h>
+#include <thread>
 #endif
 #include <locale.h>
 

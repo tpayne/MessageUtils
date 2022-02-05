@@ -29,7 +29,6 @@
 #include <winsock.h>
 #endif
 
-
 #include "UtilityFuncs.h"
 
 #ifdef _WIN32

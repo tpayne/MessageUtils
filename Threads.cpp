@@ -55,14 +55,14 @@ Threads::Threads(const Threads &val) {
   size_t stack = 0;
   (void)pthread_attr_getstacksize(&val.m_Pta, &stack);
   (void)pthread_attr_setstacksize(&m_Pta, stack);
-  
+
   void *stackAddrx = 0;
-  size_t v = 0; 
-  (void)pthread_attr_getstack(&val.m_Pta, &stackAddrx, &v); 
-  (void)pthread_attr_setstack(&m_Pta, stackAddrx, v); 
+  size_t v = 0;
+  (void)pthread_attr_getstack(&val.m_Pta, &stackAddrx, &v);
+  (void)pthread_attr_setstack(&m_Pta, stackAddrx, v);
   //(void)pthread_attr_getstackaddr(&val.m_Pta, &stackAddrx);
   //(void)pthread_attr_setstackaddr(&m_Pta, stackAddrx);
-  
+
   int detached = 0;
   (void)pthread_attr_getdetachstate(&val.m_Pta, &detached);
   (void)pthread_attr_setdetachstate(&m_Pta, detached);
@@ -149,9 +149,9 @@ Threads &Threads::operator=(const Threads &val) {
   (void)pthread_attr_getstacksize(&val.m_Pta, &stack);
   (void)pthread_attr_setstacksize(&m_Pta, stack);
   void *stackAddrx = 0;
-  size_t v = 0; 
-  (void)pthread_attr_getstack(&val.m_Pta, &stackAddrx, &v); 
-  (void)pthread_attr_setstack(&m_Pta, stackAddrx, v); 
+  size_t v = 0;
+  (void)pthread_attr_getstack(&val.m_Pta, &stackAddrx, &v);
+  (void)pthread_attr_setstack(&m_Pta, stackAddrx, v);
   //(void)pthread_attr_getstackaddr(&val.m_Pta, &stackAddrx);
   //(void)pthread_attr_setstackaddr(&m_Pta, stackAddrx);
   int detached = 0;

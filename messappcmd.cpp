@@ -19,13 +19,12 @@
  Currently, this code only supports MSN and is in an alpha coding phase
 */
 
+#include <cstring>
 #include <iostream>
 #include <locale.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <cstring>
-
 
 /// Local includes
 #include "Msn.h"
@@ -467,7 +466,7 @@ int main(const int argc, const char **argv) {
   (void)setlocale(LC_ALL, "");
 #endif ///    !defined(NO_LOCALE)///
 
-  if (argc > 0) {
+  if (argc > 1) {
     if (!strcasecmp(argv[1], "msn")) {
       Msn cMsn(argc, argv);
       if (cMsn.IsOk()) {
@@ -480,6 +479,8 @@ int main(const int argc, const char **argv) {
         ProcessCmd(&cYahoo);
       } else
         cYahoo.Usage(argc, argv);
+    } else {
+      std::cout << "Unknown option!" << std::endl;
     }
   }
 

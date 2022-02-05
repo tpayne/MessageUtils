@@ -12,7 +12,6 @@
 #include <fcntl.h>
 #include <iostream>
 
-
 ///
 /// As this module may need to be threaded, we need a simple
 /// mutex lock on critical calls such as network packet consuming
