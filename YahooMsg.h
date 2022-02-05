@@ -10,8 +10,8 @@
 #define __yahoomsg_h_
 
 #include "YahooConstants.h"
-#include <map>
 #include <cstring>
+#include <map>
 #include <string>
 
 class YahooChatMsg {

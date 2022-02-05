@@ -9,8 +9,8 @@
 #ifndef __UtilityFuncs_h_
 #define __UtilityFuncs_h_
 
-#include <sstream>
 #include <cstring>
+#include <sstream>
 
 #include "Threads.h"
 #include <stdlib.h>

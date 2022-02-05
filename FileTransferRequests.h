@@ -10,8 +10,8 @@
 #define __filetransferrequests_h__
 
 #include <cstring>
-#include <vector>
 #include <string>
+#include <vector>
 
 class FileTransfersReq {
 public:
