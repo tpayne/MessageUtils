@@ -23,11 +23,12 @@ INCLUDES =  \
 		-I$(OPENSSL_DIR)/include/
 
 CFLAGS = \
-		-std=c++11 -DUNIX -DMAC -Dunix -Wno-deprecated-declarations \
+		-std=c++11 -Wall -DUNIX -DMAC -Dunix -Wno-deprecated-declarations \
 		-fpermissive -Wno-deprecated $(INCLUDES)
 
+
 ifdef DEBUG
-CFLAGS += -g
+CFLAGS += -g3
 endif
 
 CXXFLAGS = $(CFLAGS)

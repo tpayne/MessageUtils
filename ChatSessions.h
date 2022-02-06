@@ -32,7 +32,7 @@ public:
   ChatSessions(const std::string *);
   ChatSessions(const std::string *, CALLBACKFUNCPTR val);
   ChatSessions(const ChatSessions &val);
-  ~ChatSessions();
+  virtual ~ChatSessions();
 
   inline bool const IsDebug() { return m_Debug; }
   inline NetworkOps *GetNetOps() { return &m_Net; }
