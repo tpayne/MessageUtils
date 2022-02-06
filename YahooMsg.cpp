@@ -234,7 +234,7 @@ void YahooChatMsg::PrintHexMsg(std::string &str) {
       if (isprint(m_msgTxt[x]))
         (void)sprintf(tmp, "%c ", m_msgTxt[x]);
       else
-        (void)sprintf(tmp, "- ", m_msgTxt[x]);
+        (void)sprintf(tmp, "- ");
 
       str.append(tmp);
     }

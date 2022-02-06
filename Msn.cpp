@@ -1471,7 +1471,6 @@ bool Msn::MSNChat(const std::string *ptr) {
     (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
                                  __LINE__, responses.c_str());
 
-  int rc = 0;
 
   // Register the chat callback and launch the process...
   sbRemoteHost->GetThread()->SetFunction(ChatCallback);
@@ -1480,7 +1479,7 @@ bool Msn::MSNChat(const std::string *ptr) {
   sbRemoteHost->SetReply2RemoteChat(true);
   if (GetFunction())
     sbRemoteHost->SetFunction(GetFunction());
-  rc = sbRemoteHost->StartChat();
+  (void)sbRemoteHost->StartChat();
 
   GetChats()->push_back(sbRemoteHost);
   return true;
@@ -1711,8 +1710,6 @@ bool Msn::StartChat(const std::string *who) {
     return false;
   }
 
-  int rc = 0;
-
   // Register the chat callback and launch the process...
   sbRemoteHost->GetThread()->SetFunction(ChatCallback);
   sbRemoteHost->GetThread()->SetParam((void *)sbRemoteHost);
@@ -1720,7 +1717,7 @@ bool Msn::StartChat(const std::string *who) {
   sbRemoteHost->SetReply2RemoteChat(false);
   if (GetFunction())
     sbRemoteHost->SetFunction(GetFunction());
-  rc = sbRemoteHost->StartChat();
+  (void)sbRemoteHost->StartChat();
 
   GetChats()->push_back(sbRemoteHost);
   return true;

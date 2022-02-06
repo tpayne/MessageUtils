@@ -482,7 +482,7 @@ bool GetTmpFilename(std::string &fileName) {
   if (ltime < 0)
     ltime = 123456;
   (void)sprintf(lName, "%s%smsn%#08x%#08x.tmp", pTmpDir, DIRSEP, getpid(),
-                ltime);
+                (unsigned int)ltime);
   fileName = lName;
   return true;
 }

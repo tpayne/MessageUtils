@@ -246,12 +246,10 @@ bool NetworkOps::Connect(void) {
   LockMutex();
   struct servent *servp = 0;
   struct hostent *host = 0;
-  struct sockaddr peer = {0};
   struct sockaddr_in sin = {0};
 
   int channel = -1;
-  int addrlen = 0;
-
+ 
   if (GetHostName()->empty()) {
     UnlockMutex();
     return (false);
@@ -260,9 +258,11 @@ bool NetworkOps::Connect(void) {
   ParseHost();
   int portNo = (int)strtol(GetService()->c_str(), (char **)NULL, 10);
 
-  addrlen = sizeof(peer);
 
 #ifdef _WIN32
+  struct sockaddr peer = {0};
+  int addrlen = 0;
+  addrlen = sizeof(peer);
   if (!m_Started) {
     WSADATA wsData;
     WSAStartup(MAKEWORD(2, 0), &wsData);

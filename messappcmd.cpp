@@ -462,6 +462,10 @@ void ProcessCmd(Yahoo *cYahoo) {
 int main(const int argc, const char **argv) {
   int iStatus = EXIT_SUCCESS;
 
+#ifdef UNIX
+  initSignalHandlers();
+#endif
+
 #if !defined(NO_LOCALE)
   (void)setlocale(LC_ALL, "");
 #endif ///    !defined(NO_LOCALE)///
