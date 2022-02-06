@@ -1471,7 +1471,6 @@ bool Msn::MSNChat(const std::string *ptr) {
     (void)DebugUtils::LogMessage(MSGINFO, "Debug: [%s,%d] %s", __FILE__,
                                  __LINE__, responses.c_str());
 
-
   // Register the chat callback and launch the process...
   sbRemoteHost->GetThread()->SetFunction(ChatCallback);
   sbRemoteHost->GetThread()->SetParam((void *)sbRemoteHost);

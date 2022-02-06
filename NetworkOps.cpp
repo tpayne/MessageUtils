@@ -249,7 +249,7 @@ bool NetworkOps::Connect(void) {
   struct sockaddr_in sin = {0};
 
   int channel = -1;
- 
+
   if (GetHostName()->empty()) {
     UnlockMutex();
     return (false);
@@ -257,7 +257,6 @@ bool NetworkOps::Connect(void) {
 
   ParseHost();
   int portNo = (int)strtol(GetService()->c_str(), (char **)NULL, 10);
-
 
 #ifdef _WIN32
   struct sockaddr peer = {0};
